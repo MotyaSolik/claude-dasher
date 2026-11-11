@@ -1,1 +1,1 @@
-{"versionCode": 15, "versionName": "1.15", "url": "https://motyasolik.github.io/claude-dasher/apk/claude-dash.apk", "notes": "Performance: drop canvas shadows, clip big rects, cheaper wave trail, lower DPR cap, never let a render error stop the loop"}
+{"versionCode": 16, "versionName": "1.16", "url": "https://motyasolik.github.io/claude-dasher/apk/claude-dash.apk", "notes": "Add Ball, UFO, Robot and Spider game modes: physics, rendering, editor portals, share codes, 3 new levels"}
