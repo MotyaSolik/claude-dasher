@@ -22,6 +22,8 @@
   for (const ch of CHARS) { ch.img = new Image(); ch.img.src = ch.src; }
   const heroById = (id) => CHARS.find((c) => c.id === id) || CHARS[0];
 
+  // safe mode (launcher button or ?safe=1): installed mods are kept but never run
+  const SAFE = /[?&]safe=1/.test(location.search);
   const emit = (ev, a, b) => { if (window.DashMods) DashMods.emit(ev, a, b); };
   const hooked = (ev) => !!(window.DashMods && DashMods.has(ev));
   const MODE_NAME = { cube: 'Куб', ship: 'Корабль', wave: 'Волна' };
@@ -965,6 +967,7 @@
   }
 
   function reloadMods() {
+    if (SAFE) { if (G.mode === 'menu') renderMenu(); if (modsOpen) renderMods(); return; }
     if (!window.DashMods) return;
     modLoading = true;
     try { DashMods.reloadAll(store.data.mods.filter((m) => m.enabled)); } finally { modLoading = false; }
@@ -977,6 +980,7 @@
   }
   function setMsg(t, bad) { const m = $('modMsg'); m.textContent = t; m.style.color = bad ? '#ff8a9a' : ''; }
   function installSource(src, from) {
+    if (SAFE) return setMsg('Безопасный режим: моды не загружаются. Запусти игру обычным способом, чтобы установить мод.', true);
     src = String(src || '');
     if (!src.trim()) return setMsg('Код пустой.', true);
     if (src.length > 150000) return setMsg('Мод слишком большой (максимум 150 КБ).', true);
@@ -996,6 +1000,7 @@
   function closeMods() { modsOpen = false; hide('mods'); show('menu'); renderMenu(); }
   function renderMods() {
     const list = $('modList'); list.innerHTML = '';
+    $('safeNote').classList.toggle('hidden', !SAFE);
     if (!window.DashMods) { list.textContent = 'Загрузчик модов недоступен.'; return; }
     if (!store.data.mods.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'Модов нет. Установи пример ниже или вставь свой код.'; list.appendChild(e); }
     for (const m of store.data.mods) {
@@ -1005,7 +1010,7 @@
       const t = document.createElement('b'); t.textContent = meta.name + (meta.version ? '  v' + meta.version : '');
       const d = document.createElement('span'); d.textContent = [meta.author, meta.description].filter(Boolean).join(' — ');
       const s = document.createElement('em');
-      if (!m.enabled) s.textContent = 'выключен'; else if (st && st.error) { s.textContent = 'ошибка: ' + st.error; s.className = 'bad'; } else s.textContent = 'работает';
+      if (!m.enabled) s.textContent = 'выключен'; else if (SAFE) s.textContent = 'не загружен (безопасный режим)'; else if (st && st.error) { s.textContent = 'ошибка: ' + st.error; s.className = 'bad'; } else s.textContent = 'работает';
       info.append(t, d, s);
       const tg = document.createElement('button'); tg.className = 'small'; tg.textContent = m.enabled ? 'Выключить' : 'Включить';
       tg.onclick = () => { m.enabled = !m.enabled; store.save(); reloadMods(); };
@@ -1056,7 +1061,8 @@
   }
 
   renderMenu();
-  if (window.DashMods) { DashMods.init(host); reloadMods(); }
+  if (window.DashMods && !SAFE) { DashMods.init(host); reloadMods(); }
+  $('safeBanner').classList.toggle('hidden', !SAFE);
   requestAnimationFrame(frame);
   window.__mods = { host, reload: reloadMods, install: installSource };
   window.__game = G; // handy for debugging / tests
