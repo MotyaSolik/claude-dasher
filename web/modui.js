@@ -95,13 +95,16 @@
         return field(res(it.label), sel);
       }
       case 'input': {
-        const inp = el(it.multiline ? 'textarea' : 'input'); if (!it.multiline) inp.type = 'text';
+        const inp = el(it.multiline ? 'textarea' : 'input'); if (!it.multiline) inp.type = it.password ? 'password' : 'text';
+        if (it.password) { inp.autocomplete = 'off'; inp.autocapitalize = 'off'; inp.spellcheck = false; }
         if (it.multiline) inp.rows = Math.max(2, Math.min(10, +it.rows || 3));
         inp.maxLength = Math.max(1, Math.min(5000, +it.maxLength || 200)); inp.disabled = dis;
         inp.placeholder = String(res(it.placeholder) || '');
         const cur = env.get(key); inp.value = String(cur === undefined ? (res(it.value) || '') : cur);
         inp.oninput = () => env.set(key, inp.value);
-        inp.onchange = () => changed(inp.value, true);
+        // no re-render here: it would replace the button the user is tapping and swallow that click
+        inp.onchange = () => changed(inp.value, false);
+        inp.onkeydown = (e) => { if (e.key === 'Enter' && !it.multiline && typeof it.onSubmit === 'function') { env.set(key, inp.value); guard(it.onSubmit)(inp.value, env.menu); } };
         return field(res(it.label), inp);
       }
       case 'row': {

@@ -135,7 +135,7 @@ button { font-family: inherit; }
 .mui-image { align-self: center; max-width: 100%; object-fit: contain; }
 .mui-field { display: flex; flex-direction: column; gap: 4px; }
 .mui-label { font-size: 12px; color: #c8d0f5; }
-.mui-field input[type=text], .mui-field select, .mui-field textarea { width: 100%; background: #0c1020; color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+.mui-field input[type=text], .mui-field input[type=password], .mui-field select, .mui-field textarea { width: 100%; background: #0c1020; color: var(--text); border: 1px solid var(--line); border-radius: 8px;
   padding: 7px 9px; font: inherit; font-size: 14px; -webkit-user-select: text; user-select: text; }
 .mui-field input[type=range] { width: 100%; accent-color: var(--accent); }
 .mui-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; }

@@ -182,10 +182,12 @@ panel.hide(); panel.show(); panel.refresh(); panel.remove();
 | `toggle` | `key`, `label`, `value`, `onChange(value, menu)` | переключатель |
 | `slider` | `key`, `label`, `min`, `max`, `step`, `value`, `onChange` | ползунок (`onChange` вызывается при движении) |
 | `select` | `key`, `label`, `options: [{value,label} \| 'строка']`, `value`, `onChange` | выбор из списка |
-| `input` | `key`, `label`, `value`, `placeholder`, `multiline`, `rows`, `maxLength`, `onChange` | поле ввода (`onChange` после завершения ввода) |
+| `input` | `key`, `label`, `value`, `placeholder`, `multiline`, `rows`, `maxLength`, `password`, `onChange`, `onSubmit` | поле ввода (`onChange` после завершения ввода, `onSubmit(value)` по Enter, `password: true` скрывает символы) |
 | `row` | `items` | элементы в одну строку |
 | `list` | `rows: [{title, subtitle, buttons: [{label, onClick(menu,row), style}]}]`, `empty` | список со строками и кнопками |
 | `custom` | `render(container, menu)` | свой DOM: ты получаешь пустой `div` и делаешь с ним что хочешь |
+
+Поле ввода не перерисовывает меню при потере фокуса (иначе терялось бы нажатие на кнопку рядом): прочитай его значение через `menu.get(key)` в `onClick` или `onSubmit`.
 
 Значения элементов с `key` хранятся в меню: читай через `menu.get(key)`, меняй через `menu.set(key, value)`.
 Если у меню `persist: true`, они сохраняются между запусками (до 20 КБ). Ошибка внутри одного элемента показывается
