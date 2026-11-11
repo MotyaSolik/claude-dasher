@@ -14,6 +14,7 @@
 
 <section id="menu" class="screen">
   <div class="menu-inner">
+    <div id="safeBanner" class="safebanner hidden">Безопасный режим: моды выключены</div>
     <h1 class="title"><span>CLAUDE</span> <span class="dash">DASH</span></h1>
 
     <div class="block">
@@ -58,6 +59,7 @@
   <div class="card modcard">
     <div class="mhead"><h2>Моды</h2><button id="modClose" class="small">← Назад</button></div>
     <p class="warn">Мод — это код. Он выполняется внутри игры и может менять её как угодно. Ставь только те моды, которым доверяешь. Описание API: docs/MODDING.md в репозитории.</p>
+    <div id="safeNote" class="warn hidden">Безопасный режим: моды сейчас не работают. Здесь можно выключить или удалить сломанный мод, потом запусти игру обычным способом.</div>
     <div id="modList" class="mlist"></div>
     <h2>Добавить мод</h2>
     <textarea id="modSrc" rows="5" spellcheck="false" placeholder="Вставь код мода: ClaudeDash.register({ ... })"></textarea>

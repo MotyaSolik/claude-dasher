@@ -10,8 +10,27 @@ android {
         applicationId 'com.motyasolik.claudedash'
         minSdk 21
         targetSdk 34
-        versionCode 1
-        versionName '1.0'
+        // CI passes -Pvc=<run number> -Pvn=1.<run number>; every build must have a higher versionCode to be installable as an update
+        versionCode = Integer.parseInt((project.findProperty('vc') ?: '1').toString())
+        versionName = (project.findProperty('vn') ?: '1.0').toString()
+    }
+
+    // Android only installs an update when its signature matches the installed app, so releases must always be signed
+    // with the same key. The key is NOT in the repository: CI restores it from GitHub secrets and passes it through
+    // these environment variables. Without them the build falls back to the debug key (fine to run, but not updatable).
+    def keystorePath = System.getenv('KEYSTORE_FILE')
+    signingConfigs {
+        app {
+            if (keystorePath) {
+                storeFile file(keystorePath)
+                storePassword System.getenv('KEYSTORE_PASSWORD')
+                keyAlias System.getenv('KEY_ALIAS')
+                keyPassword System.getenv('KEY_PASSWORD')
+            }
+        }
+    }
+    lint {
+        checkReleaseBuilds false
     }
 
     // the whole game lives in /web — it is packaged as the app's assets
@@ -22,9 +41,12 @@ android {
     }
 
     buildTypes {
+        debug {
+            signingConfig keystorePath ? signingConfigs.app : signingConfigs.debug
+        }
         release {
             minifyEnabled false
-            signingConfig signingConfigs.debug   // sideload-friendly: signed with the debug key
+            signingConfig keystorePath ? signingConfigs.app : signingConfigs.debug
         }
     }
     compileOptions {

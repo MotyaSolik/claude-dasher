@@ -23,19 +23,54 @@ jobs:
       - run: node tools/verify.js
       - uses: actions/setup-java@v4
         with: { distribution: temurin, java-version: 17 }
-      - name: Build debug APK
+      - name: Restore the signing key from secrets
+        id: key
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KS" ]; then
+            echo "$KS" | base64 -d > "$RUNNER_TEMP/claudedash.jks"
+            echo "KEYSTORE_FILE=$RUNNER_TEMP/claudedash.jks" >> "$GITHUB_ENV"
+            echo "signed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No ANDROID_KEYSTORE_BASE64 secret: building with the debug key, the update will NOT be published."
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build release APK
         working-directory: android
-        run: ./gradlew --no-daemon assembleDebug
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew --no-daemon assembleRelease -Pvc=${{ github.run_number }} -Pvn=1.${{ github.run_number }}
+      - name: Prepare the update files
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk dist/claude-dash.apk
+          python3 - <<'PY'
+          import json, os, subprocess
+          note = subprocess.run(['git', 'log', '-1', '--pretty=%s'], capture_output=True, text=True).stdout.strip()
+          n = int(os.environ['RUN_NUMBER'])
+          json.dump({
+              'versionCode': n,
+              'versionName': '1.%d' % n,
+              'url': 'https://motyasolik.github.io/claude-dasher/apk/claude-dash.apk',
+              'notes': note[:200],
+          }, open('dist/version.json', 'w'), ensure_ascii=False)
+          PY
+          cat dist/version.json
       - uses: actions/upload-artifact@v4
         with:
           name: claude-dash-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-      - name: Publish APK next to the web version
+          path: dist/claude-dash.apk
+      - name: Publish the update (GitHub Pages /apk)
+        if: steps.key.outputs.signed == 'true'
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: android/app/build/outputs/apk/debug
+          publish_dir: dist
           destination_dir: apk
           publish_branch: gh-pages
           keep_files: true
-          exclude_assets: 'output-metadata.json'

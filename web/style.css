@@ -161,3 +161,5 @@ button { font-family: inherit; }
 .mpanel.p-top-left { top: 40px; left: max(8px, env(safe-area-inset-left)); } .mpanel.p-top-right { top: 60px; right: max(8px, env(safe-area-inset-right)); }
 .mpanel.p-bottom-left { bottom: 8px; left: max(8px, env(safe-area-inset-left)); } .mpanel.p-bottom-right { bottom: 8px; right: max(8px, env(safe-area-inset-right)); }
 .mpanel.p-top { top: 36px; left: 50%; transform: translateX(-50%); } .mpanel.p-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }
+
+.safebanner { text-align: center; font-size: 12px; font-weight: 700; color: #ffcf7a; background: rgba(255, 180, 60, .12); border: 1px solid rgba(255, 180, 60, .4); border-radius: 10px; padding: 5px 10px; margin: 2px auto 6px; max-width: 360px; }

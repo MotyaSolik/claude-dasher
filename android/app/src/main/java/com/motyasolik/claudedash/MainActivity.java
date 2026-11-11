@@ -60,7 +60,9 @@ public class MainActivity extends Activity {
         });
 
         setContentView(web);
-        web.loadUrl("file:///android_asset/index.html");
+        // safe mode = the game starts without loading any mods (see LauncherActivity)
+        boolean safe = getIntent().getBooleanExtra("safe", false);
+        web.loadUrl("file:///android_asset/index.html" + (safe ? "?safe=1" : ""));
     }
 
     private void goImmersive() {
