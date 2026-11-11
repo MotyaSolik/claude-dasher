@@ -73,6 +73,14 @@
   </div>
 </section>
 
+<section id="modMenu" class="screen hidden">
+  <div class="card modcard">
+    <div class="mhead"><h2 id="modMenuTitle"></h2><button id="modMenuClose" class="small">← Назад</button></div>
+    <div id="modMenuBody" class="mui"></div>
+  </div>
+</section>
+
+<div id="modPanels" class="modpanels"></div>
 <div id="toast" class="toast hidden"></div>
 
 <section id="editor" class="hidden">
@@ -113,6 +121,7 @@
     <button id="btnResume" class="big">▶ Продолжить</button>
     <button id="btnRestart" class="big alt">↻ Заново</button>
     <button id="btnMenu" class="big alt">☰ В меню</button>
+    <div id="pauseExtra" class="pauseextra"></div>
   </div>
 </section>
 
@@ -129,6 +138,7 @@
 
 <script src="core.js"></script>
 <script src="mods.js"></script>
+<script src="modui.js"></script>
 <script src="examples.js"></script>
 <script src="game.js"></script>
 </body>

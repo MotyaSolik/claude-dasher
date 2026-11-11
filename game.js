@@ -135,7 +135,7 @@
     if (G.mode !== 'play' && G.mode !== 'dead') return;
     G.prevMode = G.mode; G.mode = 'pause'; Snd.musicStop();
     $('btnMenu').textContent = G.testing ? '✎ В редактор' : '☰ В меню';
-    show('pause');
+    renderPauseExtra(); show('pause');
   }
   function resume() {
     if (G.mode !== 'pause') return;
@@ -161,6 +161,7 @@
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
   const JUMPKEY = (e) => e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW';
   window.addEventListener('keydown', (e) => {
+    if (curMenu) { if (e.code === 'Escape') closeMenu(); return; }
     if (G.mode === 'edit') {
       if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
       if (e.code === 'ArrowRight') edPan(4); else if (e.code === 'ArrowLeft') edPan(-4);
@@ -183,6 +184,7 @@
   window.__back = () => {
     if (G.mode === 'play' || G.mode === 'dead') { pause(); return true; }
     if (G.mode === 'pause' || G.mode === 'win') { leave(); return true; }
+    if (curMenu) { closeMenu(); return true; }
     if (modsOpen) { closeMods(); return true; }
     if (G.mode === 'edit') { if (!$('edCodePanel').classList.contains('hidden')) hide('edCodePanel'); else edExit(); return true; }
     return false;
@@ -715,7 +717,8 @@
   // Mods: host (what the Mod API may touch) + mods screen
   // ======================================================================
   if (!Array.isArray(store.data.mods)) store.data.mods = [];
-  const modButtons = [];
+  const modButtons = [], pauseButtons = [], uiMenus = [], uiPanels = [], themes = new Map();
+  let curMenu = null, menuUnder = null;
   G.modLevels = [];
   let modsOpen = false, modLoading = false;
   const clampN = (v, lo, hi, d) => (typeof v === 'number' && isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
@@ -808,8 +811,137 @@
       for (let i = CHARS.length - 1; i >= 0; i--) if (CHARS[i].mod === modId) CHARS.splice(i, 1);
       G.modLevels = G.modLevels.filter((x) => x.modId !== modId);
       for (let i = modButtons.length - 1; i >= 0; i--) if (modButtons[i].modId === modId) modButtons.splice(i, 1);
+      for (let i = pauseButtons.length - 1; i >= 0; i--) if (pauseButtons[i].modId === modId) pauseButtons.splice(i, 1);
+      if (curMenu && curMenu.modId === modId) closeMenu(true);
+      for (let i = uiMenus.length - 1; i >= 0; i--) if (uiMenus[i].modId === modId) uiMenus.splice(i, 1);
+      for (let i = uiPanels.length - 1; i >= 0; i--) if (uiPanels[i].modId === modId) { uiPanels[i].el.remove(); uiPanels.splice(i, 1); }
+      if (themes.delete(modId)) applyTheme();
     },
+    addPauseButton(label, fn, modId) { pauseButtons.push({ modId, label, fn }); },
+    createMenu(spec, modId, guard) { return createMenu(spec, modId, guard); },
+    createPanel(spec, modId, guard) { return createPanel(spec, modId, guard); },
+    setTheme(modId, vars) { themes.set(modId, cleanTheme(vars)); applyTheme(); },
   };
+
+
+  // ---------- mod UI: menus, panels, theme, pause buttons ----------
+  const THEME_VARS = { accent: '--accent', accent2: '--accent2', bg: '--bg', card: '--card', line: '--line', text: '--text' };
+  function cleanTheme(v) {
+    const out = {};
+    for (const k of Object.keys(v || {})) {
+      if (!(k in THEME_VARS)) throw new Error('setTheme: неизвестный ключ «' + k + '». Можно: ' + Object.keys(THEME_VARS).join(', '));
+      const c = String(v[k]);
+      if (!/^(#[0-9a-f]{3,8}|rgba?\([\d\s.,%]+\)|hsla?\([\d\s.,%deg]+\))$/i.test(c)) throw new Error('setTheme: плохой цвет «' + c + '»');
+      out[THEME_VARS[k]] = c;
+    }
+    return out;
+  }
+  function applyTheme() {
+    const r = document.documentElement.style;
+    for (const p of Object.values(THEME_VARS)) r.removeProperty(p);
+    for (const vars of themes.values()) for (const [p, val] of Object.entries(vars)) r.setProperty(p, val);
+  }
+  function renderPauseExtra() {
+    const box = $('pauseExtra'); box.innerHTML = '';
+    for (const b of pauseButtons) {
+      const e = document.createElement('button'); e.className = 'big alt'; e.textContent = b.label; e.onclick = () => b.fn();
+      box.appendChild(e);
+    }
+  }
+
+  // one object backs both menus and panels: { items, values, persist, guard, modId, id }
+  function makeUI(spec, modId, guard, kind) {
+    if (!spec || typeof spec !== 'object') throw new Error(kind + ': нужен объект с настройками');
+    if (typeof spec.id !== 'string' || !/^[a-z0-9_-]{1,40}$/.test(spec.id)) throw new Error(kind + ': id — a-z 0-9 _ - (до 40 символов)');
+    const list = kind === 'createMenu' ? uiMenus : uiPanels;
+    if (list.some((x) => x.modId === modId && x.id === spec.id)) throw new Error(kind + ': «' + spec.id + '» уже существует');
+    const u = { modId, id: spec.id, title: String(spec.title || spec.id).slice(0, 40), guard, values: {}, persist: !!spec.persist,
+      items: spec.items || (typeof spec.render === 'function' ? [{ type: 'custom', render: spec.render }] : []) };
+    if (u.persist) { const saved = host.getData(modId, 'ui:' + spec.id, null); if (saved && typeof saved === 'object') u.values = saved; }
+    u.env = {
+      guard, get: (k) => u.values[k],
+      set: (k, v) => { u.values[k] = v; if (u.persist) { try { host.setData(modId, 'ui:' + spec.id, u.values); } catch (e) { /* too big */ } } },
+      refresh: () => u.draw && u.draw(),
+    };
+    u.common = {
+      id: spec.id,
+      get: (k) => u.values[k],
+      set: (k, v) => { u.env.set(k, v); u.draw && u.draw(); },
+      setItems: (items) => { u.items = items; u.draw && u.draw(); },
+      refresh: () => u.draw && u.draw(),
+    };
+    return u;
+  }
+
+  function createMenu(spec, modId, guard) {
+    const m = makeUI(spec, modId, guard, 'createMenu');
+    m.onClose = typeof spec.onClose === 'function' ? spec.onClose : null;
+    m.draw = () => { if (curMenu === m) drawMenu(m); };
+    m.handle = Object.freeze({
+      ...m.common,
+      open: () => openMenu(m), close: () => { if (curMenu === m) closeMenu(); }, isOpen: () => curMenu === m,
+      addToMainMenu: (label) => host.addButton(String(label).slice(0, 30), () => openMenu(m), modId),
+      addToPauseMenu: (label) => host.addPauseButton(String(label).slice(0, 30), () => openMenu(m), modId),
+    });
+    m.env.menu = m.handle;
+    uiMenus.push(m);
+    return m.handle;
+  }
+  function drawMenu(m) {
+    const body = $('modMenuBody'), top = body.scrollTop; body.innerHTML = '';
+    $('modMenuTitle').textContent = m.title;
+    const items = typeof m.items === 'function' ? m.guard(m.items)() : m.items;
+    DashModUI.render(body, items, m.env); body.scrollTop = top;
+  }
+  function openMenu(m) {
+    if (curMenu === m || modsOpen) return;
+    if (!curMenu) {
+      if (G.mode === 'play' || G.mode === 'dead') pause();
+      if (G.mode === 'menu') { hide('menu'); menuUnder = 'menu'; }
+      else if (G.mode === 'pause') { hide('pause'); menuUnder = 'pause'; }
+      else return toast('Меню мода открывается из главного меню или паузы');
+    }
+    curMenu = m; show('modMenu'); drawMenu(m);
+  }
+  function closeMenu(silent) {
+    const m = curMenu; if (!m) return;
+    curMenu = null; hide('modMenu');
+    if (menuUnder === 'menu') { show('menu'); renderMenu(); } else if (menuUnder === 'pause') show('pause');
+    menuUnder = null;
+    if (!silent && m.onClose) m.guard(m.onClose)();
+  }
+  $('modMenuClose').onclick = () => closeMenu();
+
+  const PANEL_POS = ['top-left', 'top-right', 'bottom-left', 'bottom-right', 'top', 'bottom'];
+  const PANEL_MODES = ['menu', 'play', 'dead', 'pause', 'win', 'edit'];
+  function createPanel(spec, modId, guard) {
+    const p = makeUI(spec, modId, guard, 'createPanel');
+    const pos = PANEL_POS.indexOf(spec.position) >= 0 ? spec.position : 'top-left';
+    p.modes = Array.isArray(spec.modes) ? spec.modes.filter((x) => PANEL_MODES.indexOf(x) >= 0) : ['play', 'dead', 'win'];
+    p.every = Math.max(0, Math.min(10, +spec.refreshEvery || 0)); p.acc = 0; p.hidden = false;
+    p.el = document.createElement('div'); p.el.className = 'mpanel p-' + pos + (spec.interactive ? ' ia' : ''); p.el.classList.add('hidden');
+    $('modPanels').appendChild(p.el);
+    p.draw = () => {
+      p.el.innerHTML = '';
+      const items = typeof p.items === 'function' ? p.guard(p.items)() : p.items;
+      DashModUI.render(p.el, items, p.env);
+    };
+    p.handle = Object.freeze({
+      ...p.common,
+      show: () => { p.hidden = false; }, hide: () => { p.hidden = true; },
+      remove: () => { p.el.remove(); const i = uiPanels.indexOf(p); if (i >= 0) uiPanels.splice(i, 1); },
+    });
+    p.env.menu = p.handle;
+    uiPanels.push(p); p.draw();
+    return p.handle;
+  }
+  function syncPanels(dt) {
+    for (const p of uiPanels) {
+      const vis = !p.hidden && p.modes.indexOf(G.mode) >= 0;
+      p.el.classList.toggle('hidden', !vis);
+      if (vis && p.every) { p.acc += dt; if (p.acc >= p.every) { p.acc = 0; p.draw(); } }
+    }
+  }
 
   function renderModLevels() {
     const box = $('modLevels'), wrap = $('modLevelsBlock');
@@ -918,6 +1050,7 @@
   function frame(now) {
     const dt = Math.min(0.05, (now - (G.last || now)) / 1000); G.last = now; menuT += dt;
     if (G.mode !== 'menu' && G.mode !== 'pause' && G.mode !== 'edit') update(dt);
+    if (uiPanels.length) syncPanels(dt);
     render();
     requestAnimationFrame(frame);
   }
