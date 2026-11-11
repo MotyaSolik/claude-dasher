@@ -31,10 +31,51 @@
       <div id="levels" class="levels"></div>
     </div>
 
+    <div class="block">
+      <h2>Мои уровни</h2>
+      <div class="cbtns">
+        <button id="btnNew" class="small go">➕ Создать уровень</button>
+        <button id="btnImport" class="small">⇄ Вставить код</button>
+      </div>
+      <div id="customList" class="clist"></div>
+    </div>
+
     <div class="foot">
       <button id="btnSound" class="small">🔊 Звук: вкл</button>
       <span class="hint">Тап / пробел / клик — прыжок. Зажми — прыгай подряд.</span>
     </div>
+  </div>
+</section>
+
+<section id="editor" class="hidden">
+  <div class="edtop">
+    <button id="edBack" class="small" aria-label="Назад">←</button>
+    <input id="edName" type="text" maxlength="24" placeholder="Название" autocomplete="off">
+    <button id="edDiff" class="small">Тест: Hard</button>
+    <button id="edTest" class="small go">▶ Тест</button>
+    <button id="edSave" class="small">💾 Сохранить</button>
+    <button id="edCode" class="small">⇄ Код</button>
+  </div>
+  <div id="edCodePanel" class="codepanel hidden">
+    <p>Код уровня. Скопируй, чтобы поделиться, или вставь чужой и нажми «Загрузить».</p>
+    <textarea id="edCodeText" rows="4" spellcheck="false"></textarea>
+    <div class="cbtns">
+      <button id="edCopy" class="small go">Копировать</button>
+      <button id="edLoad" class="small">Загрузить</button>
+      <button id="edCodeClose" class="small">Закрыть</button>
+    </div>
+    <div id="edCodeMsg" class="hint"></div>
+  </div>
+  <div class="edbottom">
+    <div class="edbar">
+      <button id="edLeft" class="small">◀</button>
+      <input id="edScroll" type="range" min="0" max="100" step="0.5" value="0" aria-label="Прокрутка уровня">
+      <button id="edRight" class="small">▶</button>
+      <button id="edLenMinus" class="small">−20</button>
+      <span id="edInfo" class="hint"></span>
+      <button id="edLenPlus" class="small">+20</button>
+    </div>
+    <div id="edTools" class="tools"></div>
   </div>
 </section>
 
