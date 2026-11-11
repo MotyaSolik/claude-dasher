@@ -26,8 +26,10 @@
   const SAFE = /[?&]safe=1/.test(location.search);
   const emit = (ev, a, b) => { if (window.DashMods) DashMods.emit(ev, a, b); };
   const hooked = (ev) => !!(window.DashMods && DashMods.has(ev));
-  const MODE_NAME = { cube: 'Куб', ship: 'Корабль', wave: 'Волна' };
-  const MODE_COL = { cube: '#ffa24a', ship: '#ff4d9a', wave: '#4dd8ff' };
+  const MODE_NAME = { cube: 'Куб', ship: 'Корабль', wave: 'Волна', ball: 'Шар', ufo: 'НЛО', robot: 'Робот', spider: 'Паук' };
+  const MODE_COL = { cube: '#ffa24a', ship: '#ff4d9a', wave: '#4dd8ff', ball: '#8aff5a', ufo: '#c77dff', robot: '#5affc4', spider: '#ffe14a' };
+  const MODE_CODE = { cube: 'c', ship: 's', wave: 'w', ball: 'b', ufo: 'u', robot: 'r', spider: 'p' };   // level share codes
+  const CODE_MODE = Object.fromEntries(Object.entries(MODE_CODE).map(([k, v]) => [v, k]));
 
   // ---------- audio ----------
   const Snd = {
@@ -308,10 +310,11 @@
     emit('frame', dt);
 
     const sp = G.lv.speed;
-    if (p.mode === 'cube') {
+    if (p.mode === 'ball') G.rot += (sp * dt / 0.4) * (p.gdir < 0 ? 1 : -1);
+    else if (p.mode === 'cube') {
       if (!p.grounded) G.rot += 14.1 * dt;
       else G.rot += (Math.round(G.rot / (Math.PI * 2)) * Math.PI * 2 - G.rot) * Math.min(1, dt * 22);
-    } else {
+    } else if (p.mode === 'ship' || p.mode === 'wave') {
       const target = p.mode === 'wave' ? (G.held ? -Math.PI / 4 : Math.PI / 4)
         : Math.max(-0.9, Math.min(0.9, -Math.atan2(p.vy, sp)));
       G.ang += (target - G.ang) * Math.min(1, dt * 20);
@@ -353,7 +356,7 @@
     // ceilings of ship / wave sections
     const ceilY = sy(C.CEIL);
     for (const seg of lv.segments) {
-      if (seg.mode === 'cube') continue;
+      if (!DashCore.hasCeiling(seg.mode)) continue;
       let x0 = sx(seg.x0), x1 = sx(seg.x1); if (x1 < -10 || x0 > W + 10) continue;
       x0 = Math.max(x0, -10); x1 = Math.min(x1, W + 10);
       ctx.fillStyle = hsl(h, 55, 9); ctx.fillRect(x0, -30, x1 - x0, ceilY + 30);
@@ -456,6 +459,35 @@
       ctx.beginPath(); ctx.moveTo(-T * 0.58, T * 0.02); ctx.lineTo(T * 0.62, T * 0.08);
       ctx.quadraticCurveTo(T * 0.5, T * 0.34, T * 0.1, T * 0.36); ctx.lineTo(-T * 0.4, T * 0.3); ctx.closePath(); ctx.fill(); ctx.stroke();
       ctx.fillStyle = MODE_COL.ship; ctx.fillRect(-T * 0.3, T * 0.12, T * 0.5, T * 0.05);
+    } else if (p.mode === 'ball') {
+      ctx.translate(cx, cy);
+      ctx.fillStyle = '#1b2540'; ctx.strokeStyle = MODE_COL.ball; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, T * 0.43, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.rotate(G.rot); drawHeroSprite(img, 0, 0, T * 0.62, 0);
+    } else if (p.mode === 'ufo') {
+      ctx.translate(cx, cy); ctx.rotate(Math.max(-0.3, Math.min(0.3, -p.vy * 0.02)));
+      drawHeroSprite(img, 0, -T * 0.2, T * 0.66, 0);
+      ctx.fillStyle = '#2a3354'; ctx.strokeStyle = MODE_COL.ufo; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.ellipse(0, T * 0.1, T * 0.5, T * 0.2, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = MODE_COL.ufo;
+      for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.arc(i * T * 0.22, T * 0.12, T * 0.04, 0, Math.PI * 2); ctx.fill(); }
+    } else if (p.mode === 'robot') {
+      ctx.translate(cx, cy);
+      const run = p.grounded ? Math.sin(p.x * 6) : 0.6;
+      ctx.strokeStyle = MODE_COL.robot; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.beginPath();
+      ctx.moveTo(-T * 0.18, T * 0.3); ctx.lineTo(-T * 0.18 + run * T * 0.16, T * 0.5);
+      ctx.moveTo(T * 0.18, T * 0.3); ctx.lineTo(T * 0.18 - run * T * 0.16, T * 0.5); ctx.stroke();
+      drawHeroSprite(img, 0, -T * 0.05, T * 0.95, 0);
+    } else if (p.mode === 'spider') {
+      ctx.translate(cx, cy);
+      const d = p.gdir < 0 ? 1 : -1, w = Math.sin(p.x * 8) * T * 0.08;
+      ctx.strokeStyle = MODE_COL.spider; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.beginPath();
+      for (const side of [-1, 1]) for (let k = 0; k < 3; k++) {
+        const ox = side * T * (0.1 + k * 0.1), ex = side * T * (0.36 + k * 0.08) + (k % 2 ? w : -w);
+        ctx.moveTo(ox, d * T * 0.12); ctx.lineTo(ex, d * T * 0.42);
+      }
+      ctx.stroke();
+      drawHeroSprite(img, 0, -d * T * 0.05, T * 0.7, 0);
     } else { // wave
       const pts = G.wtrail;
       ctx.restore(); ctx.save();
@@ -544,16 +576,17 @@
   const ED = { data: null, cells: new Map(), cam: 0, tool: 'b', lv: null, hover: null, down: false, mode: 'add', last: '', pan: null };
   const TOOLS = [
     ['b', '■', 'Блок'], ['s', '▲', 'Шип'], ['sd', '▼', 'Шип вниз'], ['p', '▬', 'Батут'],
-    ['gc', '◼', 'Куб'], ['gs', '▶', 'Корабль'], ['gw', '≈', 'Волна'],
+    ['gc', '◼', 'Куб'], ['gs', '▶', 'Корабль'], ['gw', '≈', 'Волна'], ['gb', '●', 'Шар'], ['gu', '◓', 'НЛО'], ['gr', '▣', 'Робот'], ['gp', '✱', 'Паук'],
     ['h', '∪', 'Яма'], ['e', '⌫', 'Ластик'], ['hand', '✋', 'Двигать'],
   ];
+  const PORTAL_TOOL = { gc: 'cube', gs: 'ship', gw: 'wave', gb: 'ball', gu: 'ufo', gr: 'robot', gp: 'spider' };
   const cellKey = (o) => (o.t === 'h' ? 'h' + o.x : o.t === 'g' ? 'g' + o.x : o.x + ',' + o.y);
 
   function buildToolbar() {
     const bar = $('edTools'); bar.innerHTML = '';
     for (const [id, glyph, name] of TOOLS) {
       const b = document.createElement('button');
-      b.className = 'tool' + (id === ED.tool ? ' sel' : '') + (id[0] === 'g' ? ' t-' + { gc: 'cube', gs: 'ship', gw: 'wave' }[id] : '');
+      b.className = 'tool' + (id === ED.tool ? ' sel' : '') + (id[0] === 'g' ? ' t-' + PORTAL_TOOL[id] : '');
       b.innerHTML = '<b>' + glyph + '</b><span>' + name + '</span>'; b.dataset.tool = id;
       b.onclick = () => { ED.tool = id; for (const x of bar.children) x.classList.toggle('sel', x.dataset.tool === id); };
       bar.appendChild(b);
@@ -603,7 +636,7 @@
     };
     if (t === 'e') erase();
     else if (t === 'h' || t[0] === 'g') {
-      const o = t === 'h' ? { t: 'h', x: c.x } : { t: 'g', x: c.x, m: { gc: 'cube', gs: 'ship', gw: 'wave' }[t] };
+      const o = t === 'h' ? { t: 'h', x: c.x } : { t: 'g', x: c.x, m: PORTAL_TOOL[t] };
       const k = cellKey(o), ex = ED.cells.get(k);
       if (first) ED.mode = ex && ex.m === o.m ? 'del' : 'add';
       if (ED.mode === 'del') ED.cells.delete(k); else ED.cells.set(k, o);
@@ -677,14 +710,14 @@
 
   // share code: copy / paste a level as text
   function encodeLevel(d) {
-    const o = { n: d.name, l: d.len, o: (d.objs || []).map((q) => q.t === 'h' ? ['h', q.x] : q.t === 'g' ? ['g', q.x, q.m[0]] : [q.t, q.x, q.y, q.d || 0]) };
+    const o = { n: d.name, l: d.len, o: (d.objs || []).map((q) => q.t === 'h' ? ['h', q.x] : q.t === 'g' ? ['g', q.x, MODE_CODE[q.m] || 'c'] : [q.t, q.x, q.y, q.d || 0]) };
     return 'CD1:' + btoa(unescape(encodeURIComponent(JSON.stringify(o))));
   }
   function decodeLevel(text) {
     const m = String(text).trim().match(/^CD1:([A-Za-z0-9+/=]+)$/); if (!m) throw new Error('bad');
     const o = JSON.parse(decodeURIComponent(escape(atob(m[1]))));
     const len = Math.max(40, Math.min(600, o.l | 0)), objs = [], ok = (v, a, b) => Number.isInteger(v) && v >= a && v <= b;
-    const MM = { c: 'cube', s: 'ship', w: 'wave' };
+    const MM = CODE_MODE;
     for (const q of (o.o || []).slice(0, 5000)) {
       if (q[0] === 'h' && ok(q[1], 0, len)) objs.push({ t: 'h', x: q[1] });
       else if (q[0] === 'g' && ok(q[1], 0, len) && MM[q[2]]) objs.push({ t: 'g', x: q[1], m: MM[q[2]] });
