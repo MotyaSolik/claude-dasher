@@ -18,9 +18,17 @@
     FALL_DEATH: -4,
     CEIL: 6.5,       // ceiling height in ship / wave sections
     SHIP_UP: 42, SHIP_DN: -34, SHIP_MAX: 11,
-    SIZES: { cube: 0.9, ship: 0.8, wave: 0.5 },
+    // ball / spider: gravity flips on tap while touching a surface
+    BALL_G: -62, BALL_MAXV: 22, BALL_KICK: 4,
+    // ufo: every tap is a small hop
+    UFO_G: -46, UFO_JUMP: 11, UFO_MINV: -14,
+    // robot: like the cube, but holding makes the jump higher (for ROBOT_TIME seconds)
+    ROBOT_V: 11.5, ROBOT_BOOST: 52, ROBOT_TIME: 0.32,
+    SIZES: { cube: 0.9, ship: 0.8, wave: 0.5, ball: 0.8, ufo: 0.8, robot: 0.9, spider: 0.8 },
   };
-  const MODES = ['cube', 'ship', 'wave'];
+  const MODES = ['cube', 'ship', 'wave', 'ball', 'ufo', 'robot', 'spider'];
+  const CEILING_MODES = ['ship', 'wave', 'ball', 'ufo', 'spider'];   // these sections have a ceiling
+  const hasCeiling = (m) => CEILING_MODES.indexOf(m) >= 0;
 
   function mulberry32(a) {
     return function () {
@@ -61,9 +69,9 @@
   // margin = free space the generator keeps around the guaranteed path in ship / wave sections.
   const DIFFS = [
     { id: 'easy', name: 'Easy', speed: 7.5, rest: 1.3, skip: ['padSpikes', 'padBlock', 'spikeTrain', 'pitSpike', 'hill'],
-      margin: { ship: 0.62, wave: 0.55 }, density: 0.6 },
-    { id: 'hard', name: 'Hard', speed: 10.5, rest: 0.85, skip: [], margin: { ship: 0.4, wave: 0.34 }, density: 1 },
-    { id: 'swin', name: 'SWIN', speed: 13, rest: 0.62, skip: [], margin: { ship: 0.3, wave: 0.26 }, density: 1.25 },
+      margin: { ship: 0.62, wave: 0.55, ball: 0.6, ufo: 0.6, robot: 0.55, spider: 0.6 }, density: 0.6 },
+    { id: 'hard', name: 'Hard', speed: 10.5, rest: 0.85, skip: [], margin: { ship: 0.4, wave: 0.34, ball: 0.42, ufo: 0.42, robot: 0.38, spider: 0.42 }, density: 1 },
+    { id: 'swin', name: 'SWIN', speed: 13, rest: 0.62, skip: [], margin: { ship: 0.3, wave: 0.26, ball: 0.32, ufo: 0.32, robot: 0.28, spider: 0.32 }, density: 1.25 },
   ];
 
   // plan: sections in tiles at speed 9 (scaled with the difficulty so the duration stays the same)
@@ -95,6 +103,22 @@
       id: 'l5', name: 'Зигзаг', stars: 4, seed: 9, hue: 165,
       plan: [{ m: 'cube', len: 60 }, { m: 'wave', len: 190 }, { m: 'cube', len: 60 }],
       gap: [5, 8], pool: ['spike1', 'spike2', 'block1', 'blockSpike', 'pit2', 'stairs'],
+    },
+    {
+      id: 'l6', name: 'Шар и НЛО', stars: 3, seed: 21, hue: 95,
+      plan: [{ m: 'cube', len: 60 }, { m: 'ball', len: 110 }, { m: 'cube', len: 40 }, { m: 'ufo', len: 110 }, { m: 'cube', len: 50 }],
+      gap: [5, 8], pool: ['spike1', 'spike2', 'block1', 'blockSpike', 'pit2', 'stairs'],
+    },
+    {
+      id: 'l7', name: 'Робот и паук', stars: 4, seed: 31, hue: 45,
+      plan: [{ m: 'cube', len: 60 }, { m: 'robot', len: 110 }, { m: 'cube', len: 40 }, { m: 'spider', len: 110 }, { m: 'cube', len: 50 }],
+      gap: [4.5, 7], pool: ['spike1', 'spike2', 'block1', 'blockSpike', 'spikeBlock', 'pit2', 'stairs'],
+    },
+    {
+      id: 'l8', name: 'Парад режимов', stars: 5, seed: 41, hue: 300,
+      plan: [{ m: 'cube', len: 50 }, { m: 'ship', len: 60 }, { m: 'ball', len: 60 }, { m: 'cube', len: 30 }, { m: 'ufo', len: 60 },
+        { m: 'wave', len: 60 }, { m: 'robot', len: 60 }, { m: 'cube', len: 30 }, { m: 'spider', len: 60 }, { m: 'cube', len: 40 }],
+      gap: [3.5, 6], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'padSpikes', 'spikeTrain', 'stairs'],
     },
   ];
 
@@ -178,19 +202,21 @@
     tmp.portals.push({ k: 3, x: x0, mode });
     putCol(tmp.cols, { k: 0, x: x0 - 5, y: -30, w: x1 - x0 + 20, h: 30 }, x1 - x0 + 20);
     const p = enterAt(tmp, x0); p.stop = x1 - 0.5;
-    const [dmin, dmax] = mode === 'ship' ? [0.25, 0.75] : [0.15, 0.55];
-    const dur = () => Math.max(2, Math.round((dmin + rnd() * (dmax - dmin)) * 60));
+    // seconds of [holding, released] per phase; taps (ufo / ball / spider) are 2-frame holds
+    const R = { ship: [[0.25, 0.75], [0.25, 0.75]], wave: [[0.15, 0.55], [0.15, 0.55]], ufo: [[0.033, 0.033], [0.18, 0.5]],
+      ball: [[0.033, 0.033], [0.5, 1.4]], spider: [[0.033, 0.033], [0.35, 1.0]], robot: [[0.05, 0.34], [0.35, 0.9]] }[mode];
+    const dur = (isHold) => { const r = R[isHold ? 0 : 1]; return Math.max(2, Math.round((r[0] + rnd() * (r[1] - r[0])) * 60)); };
     const holds = [], boxes = [];
     let f = 0, hold = false, start = 0, next = 6;
     while (!p.won && !p.dead && f < 60 * 300) {
-      if (f >= next) { if (hold) holds.push([start, f]); hold = !hold; start = f; next = f + dur(); }
+      if (f >= next) { if (hold) holds.push([start, f]); hold = !hold; start = f; next = f + dur(hold); }
       frame(tmp, p, hold, 0);
       boxes.push([p.x, p.y, p.sz]); f++;
     }
     if (hold) holds.push([start, f]);
     seg.holds = holds;
 
-    const M = diff.margin[mode], CE = C.CEIL;
+    const M = diff.margin[mode] || diff.margin.ship, CE = C.CEIL, ceil = hasCeiling(mode);
     const clear = (x, y, w, h) => {
       for (const [bx, by, bs] of boxes) {
         if (bx < x + w + M && bx + bs > x - M && by < y + h + M && by + bs > y - M) return false;
@@ -201,9 +227,9 @@
     while (x < x1 - 10) {
       const r = rnd(), h = 1 + Math.floor(rnd() * 3);
       let ok = false;
-      if (r < 0.25) { if ((ok = clear(x, 0, 1, 1))) lv.spikes.push({ k: 1, x, y: 0, d: 0 }); }
+      if (r < 0.25 || (!ceil && r < 0.5)) { if ((ok = clear(x, 0, 1, 1))) lv.spikes.push({ k: 1, x, y: 0, d: 0 }); }
       else if (r < 0.5) { if ((ok = clear(x, CE - 1, 1, 1))) lv.spikes.push({ k: 1, x, y: CE - 1, d: 1 }); }
-      else if (r < 0.68) { if ((ok = clear(x, 0, 1, h))) lv.solids.push({ k: 0, x, y: 0, w: 1, h }); }
+      else if (r < 0.68 || (!ceil && r < 0.86)) { if ((ok = clear(x, 0, 1, h))) lv.solids.push({ k: 0, x, y: 0, w: 1, h }); }
       else if (r < 0.86) { if ((ok = clear(x, CE - h, 1, h))) lv.solids.push({ k: 0, x, y: CE - h, w: 1, h }); }
       else { const y = 1 + Math.floor(rnd() * 4); if ((ok = clear(x, y, 1, 1))) lv.solids.push({ k: 0, x, y, w: 1, h: 1 }); }
       x += (ok ? 1.2 : 0.5) + (1 + rnd() * 2.2) / diff.density;
@@ -242,7 +268,7 @@
   // ---------- physics ----------
   function newPlayer() {
     return { x: 0, y: 0, vy: 0, grounded: true, dead: false, won: false, t: 0, jumps: 0,
-      mode: 'cube', sz: C.SIZES.cube, pi: 0, modeChanged: 0 };
+      mode: 'cube', sz: C.SIZES.cube, pi: 0, modeChanged: 0, gdir: -1, prevHeld: false, rj: 9 };
   }
   // player standing on the ground just before a section starts (used by generator + checker)
   function enterAt(lv, x0) {
@@ -253,8 +279,30 @@
   function setMode(p, m) {
     const ns = C.SIZES[m];
     p.x += (p.sz - ns) / 2;       // keep the centre, keep the bottom
-    p.sz = ns; p.mode = m; p.grounded = false;
-    if (m === 'cube') p.vy = Math.min(p.vy, 4); else p.vy = Math.max(-6, Math.min(6, p.vy));
+    p.sz = ns; p.mode = m; p.grounded = false; p.gdir = -1; p.rj = 9;
+    if (m === 'cube' || m === 'robot') p.vy = Math.min(p.vy, 4); else p.vy = Math.max(-6, Math.min(6, p.vy));
+  }
+
+  // true when a box of size sz at (x, y) overlaps a solid
+  function blockedAt(lv, x, y, sz) {
+    for (let c = Math.floor(x); c <= Math.floor(x + sz); c++) {
+      const col = lv.cols.get(c); if (!col) continue;
+      for (const o of col) {
+        if (o.k === 0 && x + sz > o.x + C.EDGE && x < o.x + o.w - C.EDGE && y < o.y + o.h - 0.01 && y + sz > o.y + 0.01) return true;
+      }
+    }
+    return false;
+  }
+  // spider: instantly jump to the opposite surface and flip gravity
+  function spiderJump(lv, p) {
+    const dir = -p.gdir, sz = p.sz;                       // gdir -1 (on floor) -> go up
+    let y = p.y;
+    for (let i = 0; i < 200; i++) {
+      const ny = y + dir * 0.1;
+      if (ny < -1 || ny + sz > C.CEIL || blockedAt(lv, p.x, ny, sz)) break;
+      y = ny;
+    }
+    p.y = y; p.gdir = dir; p.vy = 0; p.grounded = false;
   }
 
   // infl: extra spike-hitbox size, used by the checker to demand a safety margin
@@ -263,7 +311,13 @@
     infl = infl || 0;
     const { DT, EDGE, CORNER } = C;
     p.t += DT;
-    if (p.mode === 'cube' && p.grounded && held) { p.vy = C.JUMP; p.grounded = false; p.jumps++; }
+    const edge = held && !p.prevHeld; p.prevHeld = held;
+    const mode0 = p.mode;
+    if (mode0 === 'cube') { if (p.grounded && held) { p.vy = C.JUMP; p.grounded = false; p.jumps++; } }
+    else if (mode0 === 'robot') { if (p.grounded && held) { p.vy = C.ROBOT_V; p.grounded = false; p.jumps++; p.rj = 0; } }
+    else if (mode0 === 'ball') { if (edge && p.grounded) { p.gdir = -p.gdir; p.vy = p.gdir * C.BALL_KICK; p.grounded = false; p.jumps++; } }
+    else if (mode0 === 'spider') { if (edge && p.grounded) { spiderJump(lv, p); p.jumps++; } }
+    else if (mode0 === 'ufo') { if (edge) { p.vy = C.UFO_JUMP; p.jumps++; } }
 
     // --- move x, mode portals
     p.x += lv.speed * DT;
@@ -284,7 +338,16 @@
 
     // --- move y
     if (p.mode === 'cube') p.vy += C.G * DT;
-    else if (p.mode === 'ship') {
+    else if (p.mode === 'robot') {
+      p.vy += C.G * DT;
+      if (held && p.rj < C.ROBOT_TIME) { p.vy += C.ROBOT_BOOST * DT; p.rj += DT; } else if (!held) p.rj = 9;
+    } else if (p.mode === 'ball' || p.mode === 'spider') {
+      p.vy += (p.gdir < 0 ? C.BALL_G : -C.BALL_G) * DT;
+      if (p.vy > C.BALL_MAXV) p.vy = C.BALL_MAXV; else if (p.vy < -C.BALL_MAXV) p.vy = -C.BALL_MAXV;
+    } else if (p.mode === 'ufo') {
+      p.vy += C.UFO_G * DT;
+      if (p.vy < C.UFO_MINV) p.vy = C.UFO_MINV;
+    } else if (p.mode === 'ship') {
       p.vy += (held ? C.SHIP_UP : C.SHIP_DN) * DT;
       if (p.vy > C.SHIP_MAX) p.vy = C.SHIP_MAX; else if (p.vy < -C.SHIP_MAX) p.vy = -C.SHIP_MAX;
     } else p.vy = held ? lv.speed : -lv.speed;       // wave: 45 degrees
@@ -298,11 +361,14 @@
         const top = o.y + o.h;
         if (p.y < top && p.y + SZ > o.y) {
           if (p.vy <= 0 && top - p.y <= CORNER + 0.01) { p.y = top; p.vy = 0; p.grounded = true; }
-          else if (p.vy > 0 && p.y + SZ - o.y <= p.vy * DT + 0.01) { p.y = o.y - SZ; p.vy = 0; }
+          else if (p.vy > 0 && p.y + SZ - o.y <= p.vy * DT + 0.01) { p.y = o.y - SZ; p.vy = 0; if (p.gdir > 0 && (p.mode === 'ball' || p.mode === 'spider')) p.grounded = true; }
         }
       }
     }
-    if (p.mode !== 'cube' && p.y + SZ > C.CEIL) { p.y = C.CEIL - SZ; if (p.vy > 0) p.vy = 0; }
+    if (hasCeiling(p.mode) && p.y + SZ > C.CEIL) {
+      p.y = C.CEIL - SZ; if (p.vy > 0) p.vy = 0;
+      if (p.gdir > 0 && (p.mode === 'ball' || p.mode === 'spider')) p.grounded = true;
+    }
 
     // --- hazards & pads
     for (let c = c0; c <= c1; c++) {
@@ -383,6 +449,6 @@
     return sols;
   }
 
-  return { C, MODES, LEVELS, DIFFS, PATTERNS: P, buildLevel, buildCustom, addObject, newPlayer, enterAt, step, frame,
+  return { C, MODES, hasCeiling, LEVELS, DIFFS, PATTERNS: P, buildLevel, buildCustom, addObject, newPlayer, enterAt, step, frame,
     solvable, replaySegment, mulberry32 };
 });

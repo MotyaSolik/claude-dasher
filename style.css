@@ -163,3 +163,6 @@ button { font-family: inherit; }
 .mpanel.p-top { top: 36px; left: 50%; transform: translateX(-50%); } .mpanel.p-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }
 
 .safebanner { text-align: center; font-size: 12px; font-weight: 700; color: #ffcf7a; background: rgba(255, 180, 60, .12); border: 1px solid rgba(255, 180, 60, .4); border-radius: 10px; padding: 5px 10px; margin: 2px auto 6px; max-width: 360px; }
+
+.m-ball { color: #8aff5a; } .m-ufo { color: #c77dff; } .m-robot { color: #5affc4; } .m-spider { color: #ffe14a; }
+.tool.t-ball b { color: #8aff5a; } .tool.t-ufo b { color: #c77dff; } .tool.t-robot b { color: #5affc4; } .tool.t-spider b { color: #ffe14a; }
