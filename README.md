@@ -31,3 +31,7 @@ cd android && ./gradlew assembleDebug
 ## Свои герои
 
 Положи PNG с прозрачным фоном в `web/img/` и добавь запись в массив `CHARS` в `web/game.js`.
+
+## Играть онлайн
+
+После деплоя (workflow **Deploy to GitHub Pages**) игра доступна на https://motyasolik.github.io/claude-dasher/
