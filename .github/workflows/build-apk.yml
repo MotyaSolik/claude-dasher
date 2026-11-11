@@ -2,8 +2,15 @@ name: Build APK
 
 on:
   push:
-    branches: ['**']
+    branches-ignore: [gh-pages]
   workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-publish
+  cancel-in-progress: false
 
 jobs:
   apk:
@@ -23,3 +30,12 @@ jobs:
         with:
           name: claude-dash-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Publish APK next to the web version
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: android/app/build/outputs/apk/debug
+          destination_dir: apk
+          publish_branch: gh-pages
+          keep_files: true
+          exclude_assets: 'output-metadata.json'
