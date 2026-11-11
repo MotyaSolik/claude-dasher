@@ -48,6 +48,10 @@ ClaudeDash.register({
 | `api.levels.add(level)` | уровень в меню «Уровни из модов» |
 | `api.levels.block(lv,x,y,w,h)` / `.spike(lv,x,y,down)` / `.pad(lv,x,y)` | добавить объект в готовый уровень (из `levelBuilt`) |
 | `api.ui.menuButton(label, fn)` | кнопка в главном меню |
+| `api.ui.pauseButton(label, fn)` | кнопка в меню паузы |
+| `api.ui.createMenu(spec)` | **отдельное меню** из элементов (см. «Интерфейс») |
+| `api.ui.createPanel(spec)` | **панель поверх игры** (счётчики, подсказки) |
+| `api.ui.setTheme(vars)` | перекрасить меню игры |
 | `api.ui.toast(text)` | всплывающая подсказка |
 | `api.fx.particle({x,y,vx,vy,life,size,color})` | частица в мировых координатах (клетки) |
 | `api.fx.burst(x,y,n,colors,speed)` | взрыв частиц |
@@ -119,6 +123,105 @@ api.levels.add({ id: 'my-level', name: 'Мой уровень', len: 80, hue: 20
 plan: [{ m: 'cube', len: 100 }, { m: 'ship', len: 80 }, { m: 'cube', len: 60 }] }`. Доступные узоры для `pool`:
 `spike1 spike2 block1 block3 blockSpike spikeBlock stairs hill pit2 pit3 pitSpike padSpikes padBlock spikeTrain`.
 Проходимость уровней из модов не проверяется.
+
+## Интерфейс: меню, панели, тема
+
+Мод описывает интерфейс данными: массивом `items`. Игра сама рисует его, сохраняет значения и ловит ошибки.
+Весь текст выводится как текст, HTML вставить нельзя.
+
+### Отдельное меню: `api.ui.createMenu(spec)`
+
+```js
+const menu = api.ui.createMenu({
+  id: 'settings',            // обязательно: a-z 0-9 _ -, уникальный внутри мода
+  title: 'Настройки мода',   // заголовок окна
+  persist: true,             // необязательно: запоминать значения между запусками
+  items: [ ... ],            // массив элементов или функция, которая возвращает массив
+  onClose() {}               // необязательно
+});
+menu.addToMainMenu('⚙ Настройки');   // кнопка в главном меню
+menu.addToPauseMenu('⚙ Настройки');  // кнопка в паузе
+menu.open();                         // открыть из кода (из главного меню или паузы)
+```
+
+Если во время игры вызвать `menu.open()`, игра сама встанет на паузу. Кнопка «← Назад», `Esc` и системная
+кнопка «Назад» закрывают меню и возвращают туда, откуда его открыли.
+
+Объект меню: `id`, `open()`, `close()`, `isOpen()`, `refresh()` (перерисовать), `setItems(items)`,
+`get(key)`, `set(key, value)`, `addToMainMenu(label)`, `addToPauseMenu(label)`.
+
+### Панель поверх игры: `api.ui.createPanel(spec)`
+
+```js
+const panel = api.ui.createPanel({
+  id: 'info',
+  position: 'top-left',     // top-left | top-right | bottom-left | bottom-right | top | bottom
+  modes: ['play', 'dead'],  // когда показывать: menu play dead pause win edit (по умолчанию play, dead, win)
+  refreshEvery: 0.25,       // секунды: как часто перерисовывать (0 — только вручную через refresh())
+  interactive: false,       // true — панель принимает нажатия (по умолчанию пропускает их в игру)
+  items: () => [{ type: 'text', text: 'Попытка ' + api.game.state().attempt }]
+});
+panel.hide(); panel.show(); panel.refresh(); panel.remove();
+```
+
+У панели те же `get/set/setItems/refresh`, что у меню. Для рисования на самом холсте используй события `render:world` / `render:hud`.
+
+### Элементы (`items`)
+
+Любое поле `text`, `label`, `value`, `disabled`, `hidden`, `rows`, `options`, `min`, `max` можно задать функцией.
+Она вызывается при каждой перерисовке. Меню перерисовывается после каждого действия, панель по `refreshEvery` или `refresh()`.
+
+| `type` | Поля | Что делает |
+|---|---|---|
+| `heading` | `text` | заголовок раздела |
+| `text` | `text` | абзац (переносы строк сохраняются) |
+| `separator` | | линия |
+| `image` | `src`, `height` | картинка (`data:image/...`, `https://...`, `img/...`) |
+| `progress` | `value` (0–1), `label` | полоса прогресса |
+| `button` | `label`, `onClick(menu)`, `style: 'primary'\|'danger'`, `disabled`, `refresh: false` | кнопка |
+| `toggle` | `key`, `label`, `value`, `onChange(value, menu)` | переключатель |
+| `slider` | `key`, `label`, `min`, `max`, `step`, `value`, `onChange` | ползунок (`onChange` вызывается при движении) |
+| `select` | `key`, `label`, `options: [{value,label} \| 'строка']`, `value`, `onChange` | выбор из списка |
+| `input` | `key`, `label`, `value`, `placeholder`, `multiline`, `rows`, `maxLength`, `onChange` | поле ввода (`onChange` после завершения ввода) |
+| `row` | `items` | элементы в одну строку |
+| `list` | `rows: [{title, subtitle, buttons: [{label, onClick(menu,row), style}]}]`, `empty` | список со строками и кнопками |
+| `custom` | `render(container, menu)` | свой DOM: ты получаешь пустой `div` и делаешь с ним что хочешь |
+
+Значения элементов с `key` хранятся в меню: читай через `menu.get(key)`, меняй через `menu.set(key, value)`.
+Если у меню `persist: true`, они сохраняются между запусками (до 20 КБ). Ошибка внутри одного элемента показывается
+красной строкой на его месте и не ломает остальное меню. Исключение в `onClick`/`onChange` засчитывается моду
+как обычная ошибка обработчика (5 раз и мод останавливается).
+
+### Тема: `api.ui.setTheme(vars)`
+
+```js
+api.ui.setTheme({ accent: '#00e5ff', accent2: '#ff3df2', bg: '#05020f', card: '#150a2b', line: '#4a2a85', text: '#ffffff' });
+```
+
+Ключи: `accent`, `accent2`, `bg`, `card`, `line`, `text`. Значения: `#rgb`, `#rrggbb`, `rgb()/rgba()`, `hsl()/hsla()`.
+Тема меняет окна и кнопки (не игровое поле) и снимается, когда мод выключен. Если тем несколько, побеждает загруженная позже.
+
+### Пример: меню настроек и панель
+
+```js
+ClaudeDash.register({ id: 'settings-demo', name: 'Панель настроек', apiVersion: 1, init(api) {
+  const menu = api.ui.createMenu({ id: 'settings', title: 'Настройки', persist: true, items: [
+    { type: 'heading', text: 'Физика' },
+    { type: 'slider', key: 'jump', label: 'Сила прыжка', min: 12, max: 26, step: 0.5, value: 18.9,
+      onChange: (v) => api.physics.set({ JUMP: v }) },
+    { type: 'toggle', key: 'hud', label: 'Показывать панель', value: true,
+      onChange: (v) => (v ? panel.show() : panel.hide()) },
+    { type: 'button', label: 'Сбросить', onClick: (m) => { m.set('jump', 18.9); api.physics.set({ JUMP: 18.9 }); } },
+  ]});
+  menu.addToMainMenu('⚙ Настройки');
+  menu.addToPauseMenu('⚙ Настройки');
+  const saved = menu.get('jump'); if (saved !== undefined) api.physics.set({ JUMP: saved });
+  const panel = api.ui.createPanel({ id: 'info', position: 'top-left', refreshEvery: 0.25,
+    items: () => [{ type: 'text', text: 'Попытка ' + api.game.state().attempt }] });
+}});
+```
+
+Готовые примеры с интерфейсом: «Панель настроек» и «Неоновая тема» в `web/examples.js`.
 
 ## Примеры
 

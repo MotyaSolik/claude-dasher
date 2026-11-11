@@ -125,3 +125,39 @@ button { font-family: inherit; }
 .urlrow { display: flex; gap: 6px; } .urlrow input { font: 13px system-ui, sans-serif; }
 .toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: rgba(20, 26, 48, .96); border: 1px solid var(--line); color: var(--text);
   border-radius: 12px; padding: 9px 14px; font-size: 13px; z-index: 20; max-width: 90vw; pointer-events: none; }
+
+/* ---- mod UI (menus, panels) ---- */
+.pauseextra { display: flex; flex-direction: column; gap: 10px; }
+#modMenuBody { max-height: 64vh; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 2px; }
+.mui-heading { margin: 4px 0 0; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: #9aa6d6; }
+.mui-text { margin: 0; font-size: 13px; color: #c8d0f5; white-space: pre-wrap; overflow-wrap: anywhere; }
+.mui-sep { border: 0; border-top: 1px solid var(--line); margin: 2px 0; width: 100%; }
+.mui-image { align-self: center; max-width: 100%; object-fit: contain; }
+.mui-field { display: flex; flex-direction: column; gap: 4px; }
+.mui-label { font-size: 12px; color: #c8d0f5; }
+.mui-field input[type=text], .mui-field select, .mui-field textarea { width: 100%; background: #0c1020; color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+  padding: 7px 9px; font: inherit; font-size: 14px; -webkit-user-select: text; user-select: text; }
+.mui-field input[type=range] { width: 100%; accent-color: var(--accent); }
+.mui-toggle { display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; }
+.mui-toggle input { position: absolute; opacity: 0; pointer-events: none; }
+.mui-switch { width: 40px; height: 22px; border-radius: 11px; background: #2a3354; position: relative; flex: none; transition: background .15s; }
+.mui-switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.mui-toggle input:checked + .mui-switch { background: var(--accent); }
+.mui-toggle input:checked + .mui-switch::after { transform: translateX(18px); }
+.mui-toggle input:focus-visible + .mui-switch { outline: 2px solid var(--accent2); }
+.mui-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: flex-end; } .mui-row > * { flex: 1 1 120px; min-width: 0; }
+.mui-button { align-self: flex-start; }
+.mui-progress { height: 8px; background: #0c1020; border-radius: 4px; overflow: hidden; } .mui-progress i { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+.mui-list { display: flex; flex-direction: column; gap: 6px; }
+.mui-lrow { display: flex; align-items: center; gap: 6px; background: #0f1426; border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.mui-linfo { flex: 1; min-width: 0; display: flex; flex-direction: column; } .mui-linfo b { font-size: 14px; } .mui-linfo span { font-size: 11px; color: #9aa6d6; overflow-wrap: anywhere; }
+.mui-empty { font-size: 12px; color: #8791bd; text-align: center; padding: 4px; }
+.mui-err { font-size: 12px; color: #ff8a9a; }
+.modpanels { position: fixed; inset: 0; pointer-events: none; z-index: 3; }
+.mpanel { position: absolute; max-width: min(320px, 70vw); background: rgba(8, 11, 22, .6); border: 1px solid rgba(255, 255, 255, .15); border-radius: 10px; padding: 6px 9px;
+  display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.mpanel.ia { pointer-events: auto; }
+.mpanel .mui-text { font-size: 12px; } .mpanel .mui-heading { font-size: 11px; margin: 0; }
+.mpanel.p-top-left { top: 40px; left: max(8px, env(safe-area-inset-left)); } .mpanel.p-top-right { top: 60px; right: max(8px, env(safe-area-inset-right)); }
+.mpanel.p-bottom-left { bottom: 8px; left: max(8px, env(safe-area-inset-left)); } .mpanel.p-bottom-right { bottom: 8px; right: max(8px, env(safe-area-inset-right)); }
+.mpanel.p-top { top: 36px; left: 50%; transform: translateX(-50%); } .mpanel.p-bottom { bottom: 8px; left: 50%; transform: translateX(-50%); }

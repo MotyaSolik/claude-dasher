@@ -110,6 +110,8 @@
 
     makeApi(mod) {
       const self = this, H = this.host, id = mod.meta.id;
+      // wraps a mod callback so an exception is counted against the mod instead of breaking the game
+      const guard = (fn) => (typeof fn === 'function' ? (...a) => { try { return fn(...a); } catch (e) { self.fail(mod, e); } } : () => undefined);
       const num = (v, lo, hi, d) => (typeof v === 'number' && isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
       return Object.freeze({
         apiVersion: API_VERSION,
@@ -159,7 +161,12 @@
         // ---- UI ----
         ui: Object.freeze({
           menuButton: (label, fn) => H.addButton(String(label).slice(0, 30), fn, id),
+          pauseButton: (label, fn) => H.addPauseButton(String(label).slice(0, 30), guard(fn), id),
           toast: (msg) => H.toast(String(msg).slice(0, 120)),
+          // separate menus / HUD panels built from an `items` array (see docs/MODDING.md, "Интерфейс")
+          createMenu: (spec) => H.createMenu(spec, id, guard),
+          createPanel: (spec) => H.createPanel(spec, id, guard),
+          setTheme: (vars) => H.setTheme(id, vars),
         }),
 
         // ---- effects & sound ----

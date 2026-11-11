@@ -97,4 +97,58 @@ window.DashExamples = [
   }
 });`,
   },
+  {
+    name: 'Панель настроек',
+    desc: 'Своё меню с ползунком, переключателем, списком и полем ввода, плюс панель поверх игры. Пример createMenu и createPanel.',
+    src: `ClaudeDash.register({
+  id: 'settings-demo', name: 'Панель настроек', version: '1.0', author: 'Claude Dash', apiVersion: 1,
+  description: 'Меню настроек и панель на экране.',
+  init(api) {
+    const menu = api.ui.createMenu({
+      id: 'settings', title: 'Настройки мода', persist: true,
+      items: [
+        { type: 'heading', text: 'Физика' },
+        { type: 'slider', key: 'jump', label: 'Сила прыжка', min: 12, max: 26, step: 0.5, value: 18.9,
+          onChange: (v) => api.physics.set({ JUMP: v }) },
+        { type: 'heading', text: 'Экран' },
+        { type: 'toggle', key: 'hud', label: 'Показывать панель', value: true,
+          onChange: (v) => (v ? panel.show() : panel.hide()) },
+        { type: 'select', key: 'jumpMode', label: 'Прыжок сбрасывается', value: 'never',
+          options: [{ value: 'never', label: 'Никогда' }, { value: 'attempt', label: 'Каждую попытку' }] },
+        { type: 'input', key: 'name', label: 'Твоё имя', placeholder: 'Игрок' },
+        { type: 'separator' },
+        { type: 'button', label: 'Сбросить прыжок', onClick: (m) => { m.set('jump', 18.9); api.physics.set({ JUMP: 18.9 }); } },
+      ],
+    });
+    menu.addToMainMenu('⚙ Настройки мода');
+    menu.addToPauseMenu('⚙ Настройки мода');
+    api.on('attempt', () => { if (menu.get('jumpMode') === 'attempt') api.physics.set({ JUMP: 18.9 }); });
+    const saved = menu.get('jump');
+    if (saved !== undefined) api.physics.set({ JUMP: saved });
+
+    const panel = api.ui.createPanel({
+      id: 'info', position: 'top-left', refreshEvery: 0.25,
+      items: () => {
+        const s = api.game.state();
+        return [
+          { type: 'text', text: (menu.get('name') || 'Игрок') + ' · попытка ' + s.attempt },
+          { type: 'text', text: 'Режим: ' + (s.player ? s.player.mode : '—') },
+        ];
+      },
+    });
+    if (menu.get('hud') === false) panel.hide();
+  }
+});`,
+  },
+  {
+    name: 'Неоновая тема',
+    desc: 'Перекрашивает меню игры. Пример api.ui.setTheme.',
+    src: `ClaudeDash.register({
+  id: 'neon-theme', name: 'Неоновая тема', version: '1.0', author: 'Claude Dash', apiVersion: 1,
+  description: 'Фиолетово-голубые меню.',
+  init(api) {
+    api.ui.setTheme({ accent: '#00e5ff', accent2: '#ff3df2', bg: '#05020f', card: '#150a2b', line: '#4a2a85' });
+  }
+});`,
+  },
 ];
