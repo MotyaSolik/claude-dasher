@@ -153,10 +153,10 @@ window.DashExamples = [
   },
   {
     name: 'Мод-меню (по паролю)',
-    desc: 'Меню читов, которое открывается только после ввода пароля: ghost, скорость, гравитация, прыжок, хитбоксы, пропуск уровня.',
+    desc: 'Меню читов под паролем: ghost, скорость, гравитация, прыжок, хитбоксы, пропуск уровня. За неверный пароль мод мстит помехами в игре.',
     src: `ClaudeDash.register({
   id: 'mod-menu', name: 'Мод-меню', version: '1.0', author: 'Claude Dash', apiVersion: 1,
-  description: 'Читы под паролем. Кнопка в главном меню и в паузе.',
+  description: 'Читы под паролем. За неверный пароль мод мстит: мешает играть (временно).',
   init(api) {
     // Пароль не хранится открытым текстом: сравнивается хэш. Это защита от случайного входа,
     // а не настоящая безопасность: код мода можно прочитать.
@@ -173,15 +173,63 @@ window.DashExamples = [
     var cfg = { noclip: false, hitbox: false, speed: 1, gravity: -85, jump: 18.9 };
     var lv = null, baseSpeed = 0, offStep = null, offDraw = null;
 
+    // ---- месть за неверный пароль ----
+    // Чем больше неверных попыток, тем дольше и злее. Таймер идёт только во время игры и виден на экране.
+    // Снимается правильным паролем, выключается тумблером в меню или выключением мода (физика вернётся сама).
+    var wrong = 0, rev = { left: 0, level: 0, off: [], taunt: 0 };
+    var REV_TIME = [0, 15, 30, 60];
+    var TAUNTS = ['Хрю-хрю! Пароль не угадан', 'Не тот пароль. Держи гравитацию', 'Сам виноват', 'Это месть за неверный пароль', 'Попробуй пароль ещё раз'];
+    function revengeEnabled() { return api.storage.get('revenge', true) !== false; }
+    function revSpeed() { return rev.level >= 2 ? 1.25 : 1; }
+    function stopRevenge(silent) {
+      var was = rev.left > 0;
+      rev.left = 0; rev.level = 0;
+      for (var i = 0; i < rev.off.length; i++) rev.off[i]();
+      rev.off = [];
+      api.physics.set({ G: cfg.gravity, JUMP: cfg.jump }); applySpeed();
+      if (was && !silent) api.ui.toast('Месть закончилась');
+    }
+    function startRevenge(level) {
+      if (!revengeEnabled()) return;
+      stopRevenge(true);
+      rev.level = level; rev.left = REV_TIME[Math.min(level, 3)]; rev.taunt = 3;
+      api.physics.set({ G: cfg.gravity * (level >= 3 ? 1.6 : 1.4) }); applySpeed();
+      rev.off.push(api.on('frame', function (dt) {
+        rev.left -= dt; rev.taunt -= dt;
+        if (rev.left <= 0) return stopRevenge();
+        if (rev.level >= 3 && rev.taunt <= 0) { rev.taunt = 9; api.ui.toast(TAUNTS[Math.floor(Math.random() * TAUNTS.length)]); }
+      }));
+      if (level >= 2) {
+        rev.off.push(api.on('step', function (p) {   // случайные прыжки и дрожь корабля
+          if (p.mode === 'cube' && p.grounded && Math.random() < 0.003) { p.vy = cfg.jump * 0.8; p.grounded = false; }
+          else if (p.mode === 'ship' && rev.level >= 3) p.vy += (Math.random() - 0.5) * 0.8;
+        }));
+      }
+      if (level >= 3) {
+        rev.off.push(api.on('render:hud', function (r) {   // «фонарик»: видно только вокруг героя
+          var s = r.state.player; if (!s) return;
+          var c = r.ctx, x = r.sx(s.x + s.size / 2), y = r.sy(s.y + s.size / 2), R = r.TILE * (2.6 + Math.sin(Date.now() / 300) * 0.4);
+          var g = c.createRadialGradient(x, y, R * 0.5, x, y, R * 2.4);
+          g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,0.93)');
+          c.fillStyle = g; c.fillRect(0, 0, r.W, r.H);
+        }));
+      }
+      if (level >= 2) rev.off.push(api.on('death', function () { api.audio.beep(180, 60, 0.25, 'sawtooth'); }));
+    }
+
     function login() {
       var left = Math.ceil((lockUntil - Date.now()) / 1000);
       if (left > 0) { msg = 'Подожди ' + left + ' с'; return menu.refresh(); }
       var v = String(menu.get('pw') || '').trim().toLowerCase();
-      if (hash(v) === PASS_HASH) { unlocked = true; msg = ''; tries = 0; api.audio.beep(500, 1000, 0.15, 'square'); api.ui.toast('Мод-меню открыто'); }
+      if (hash(v) === PASS_HASH) { unlocked = true; msg = ''; tries = 0; wrong = 0; stopRevenge(true); api.audio.beep(500, 1000, 0.15, 'square'); api.ui.toast('Мод-меню открыто'); }
       else {
-        tries++; msg = 'Неверный пароль';
+        tries++; wrong++; msg = 'Неверный пароль.';
         if (tries >= 3) { tries = 0; lockUntil = Date.now() + 10000; msg = 'Слишком много попыток. Подожди 10 секунд.'; }
         api.audio.beep(200, 90, 0.2, 'sawtooth');
+        if (revengeEnabled()) {
+          startRevenge(Math.min(wrong, 3));
+          msg += ' Месть: ' + rev.left + ' с игры.';
+        }
       }
       menu.set('pw', '');
     }
@@ -210,7 +258,7 @@ window.DashExamples = [
         });
       } else if (!cfg.hitbox && offDraw) { offDraw(); offDraw = null; }
     }
-    function applySpeed() { if (lv && baseSpeed) lv.speed = baseSpeed * cfg.speed; }
+    function applySpeed() { if (lv && baseSpeed) lv.speed = baseSpeed * cfg.speed * revSpeed(); }
     api.on('levelBuilt', function (l) { lv = l; baseSpeed = l.speed; applySpeed(); });
 
     // работает только во время игры: открой меню из паузы
@@ -250,7 +298,7 @@ window.DashExamples = [
         { type: 'slider', key: 'speed', label: 'Скорость уровня (x)', min: 0.3, max: 2.5, step: 0.05, value: 1,
           onChange: function (v) { cfg.speed = v; applySpeed(); } },
         { type: 'slider', key: 'gravity', label: 'Гравитация куба', min: -140, max: -25, step: 1, value: -85,
-          onChange: function (v) { cfg.gravity = v; api.physics.set({ G: v }); } },
+          onChange: function (v) { cfg.gravity = v; api.physics.set({ G: rev.left > 0 ? v * (rev.level >= 3 ? 1.6 : 1.4) : v }); } },
         { type: 'slider', key: 'jump', label: 'Сила прыжка', min: 10, max: 30, step: 0.5, value: 18.9,
           onChange: function (v) { cfg.jump = v; api.physics.set({ JUMP: v }); } },
         { type: 'heading', text: 'Уровень' },
@@ -259,10 +307,12 @@ window.DashExamples = [
           { type: 'button', label: 'На середину', onClick: function () { toHalf(); } },
         ] },
         { type: 'separator' },
+        { type: 'toggle', key: 'revenge', label: 'Месть за неверный пароль', value: revengeEnabled(),
+          onChange: function (v) { api.storage.set('revenge', v); if (!v) stopRevenge(); } },
         { type: 'button', label: 'Сбросить всё', onClick: function () {
           cfg = { noclip: false, hitbox: false, speed: 1, gravity: -85, jump: 18.9 };
           ['noclip', 'hitbox', 'speed', 'gravity', 'jump'].forEach(function (k) { menu.set(k, cfg[k]); });
-          api.physics.set({ G: -85, JUMP: 18.9 }); applySpeed(); syncHooks();
+          stopRevenge(true); api.physics.set({ G: -85, JUMP: 18.9 }); applySpeed(); syncHooks();
         } },
         { type: 'button', label: 'Заблокировать меню', style: 'danger', onClick: function () { unlocked = false; msg = ''; } },
       ];
@@ -277,7 +327,9 @@ window.DashExamples = [
       items: function () {
         var on = [];
         if (cfg.noclip) on.push('ghost'); if (cfg.hitbox) on.push('хитбоксы'); if (cfg.speed !== 1) on.push('x' + cfg.speed.toFixed(2));
-        return on.length ? [{ type: 'text', text: 'МОД: ' + on.join(' · ') }] : [];
+        var out = on.length ? [{ type: 'text', text: 'МОД: ' + on.join(' · ') }] : [];
+        if (rev.left > 0) out.push({ type: 'text', text: '😈 МЕСТЬ: ' + Math.ceil(rev.left) + ' с (правильный пароль снимает)' });
+        return out;
       } });
   }
 });`,
