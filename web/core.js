@@ -8,7 +8,7 @@
 
   // All units are "tiles". The player is a SIZE x SIZE box, x grows to the right.
   const C = {
-    SPEED: 9,        // tiles / second
+    SPEED: 9,        // default tiles / second (each difficulty sets its own)
     G: -85,          // gravity
     JUMP: 18.9,      // jump impulse (≈2.1 tiles high, ≈4 tiles long)
     PAD: 27.5,       // yellow pad impulse
@@ -41,10 +41,25 @@
     pit2:    { w: 2, add: (L, x) => L.hole(x, 2) },
     pit3:    { w: 3, add: (L, x) => L.hole(x, 3) },
     pitSpike: { w: 6, add: (L, x) => { L.hole(x, 2); L.spike(x + 5, 0); } },
-    padSpikes: { w: 6, add: (L, x) => { L.pad(x, 0); for (let i = 2; i < 5; i++) L.spike(x + i, 0); } },
-    padBlock: { w: 7, add: (L, x) => { L.pad(x, 0); L.block(x + 3, 0, 3, 3); } },
-    spikeTrain: { w: 11, add: (L, x) => { L.spike(x, 0); L.spike(x + 5, 0); L.spike(x + 10, 0); } },
+    // pad flight distance grows with speed, so these scale with L.s
+    padSpikes: { w: 6, wf: (s) => Math.ceil(s * 0.647) + 2, add: (L, x) => {
+      const D = L.s * 0.647, a = Math.round(D * 0.34), n = D >= 5.5 ? 3 : 2;
+      L.pad(x, 0); for (let i = 0; i < n; i++) L.spike(x + a + i, 0);
+    } },
+    padBlock: { w: 7, wf: (s) => Math.round(s * 0.647 * 0.5) + 4, add: (L, x) => {
+      L.pad(x, 0); L.block(x + Math.round(L.s * 0.647 * 0.5), 0, 3, 3);
+    } },
+    spikeTrain: { w: 11, wf: (s) => 2 * Math.max(5, Math.round(s * 0.55)) + 1, add: (L, x) => {
+      const sp = Math.max(5, Math.round(L.s * 0.55)); L.spike(x, 0); L.spike(x + sp, 0); L.spike(x + 2 * sp, 0);
+    } },
   };
+
+  // difficulty: speed (tiles/s), rest between obstacles (as a multiple of the base gap, in time), allowed patterns
+  const DIFFS = [
+    { id: 'easy', name: 'Easy',  speed: 7.5,  rest: 1.3,  skip: ['spike3', 'padSpikes', 'padBlock', 'spikeTrain', 'pitSpike', 'hill'] },
+    { id: 'hard', name: 'Hard',  speed: 10.5, rest: 0.85, skip: [] },
+    { id: 'swin', name: 'SWIN',  speed: 13,   rest: 0.62, skip: [] },
+  ];
 
   const LEVELS = [
     {
@@ -52,43 +67,48 @@
       gap: [6, 9], pool: ['spike1', 'spike1', 'spike2', 'block1', 'block3', 'pit2', 'blockSpike', 'stairs'],
     },
     {
-      id: 'l2', name: 'Хрю-хрю', stars: 3, len: 310, seed: 7, hue: 320,
+      id: 'l2', name: 'Хрю-хрю', stars: 3, len: 310, seed: 7, seeds: { swin: 8 }, hue: 320,
       gap: [4.5, 7], pool: ['spike1', 'spike2', 'block1', 'blockSpike', 'spikeBlock', 'stairs', 'hill',
         'pit2', 'pit3', 'pitSpike', 'padSpikes', 'spikeTrain'],
     },
     {
-      id: 'l3', name: 'Кошмар Claude', stars: 5, len: 400, seed: 3, hue: 18,
+      id: 'l3', name: 'Кошмар Claude', stars: 5, len: 400, seed: 3, seeds: { swin: 4 }, hue: 18,
       gap: [3.5, 6], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'pitSpike',
         'padSpikes', 'padBlock', 'spikeTrain', 'stairs'],
     },
   ];
 
   // ---------- level building ----------
-  function buildLevel(def, seedOverride) {
-    const rnd = mulberry32(seedOverride === undefined ? def.seed : seedOverride);
-    const lv = { def, len: def.len, solids: [], spikes: [], pads: [], holes: [], cols: new Map(), ground: [] };
+  function buildLevel(def, diff, seedOverride) {
+    diff = diff || DIFFS[1];
+    const rnd = mulberry32(seedOverride !== undefined ? seedOverride : ((def.seeds && def.seeds[diff.id]) || def.seed));
+    const lv = { def, diff, speed: diff.speed, len: Math.round(def.len * diff.speed / 9), solids: [], spikes: [], pads: [], holes: [], cols: new Map(), ground: [] };
     const L = {
+      s: diff.speed,
       block: (x, y, w, h) => lv.solids.push({ k: 0, x, y, w, h }),
       spike: (x, y) => lv.spikes.push({ k: 1, x, y }),
       pad: (x, y) => lv.pads.push({ k: 2, x, y }),
       hole: (x, w) => lv.holes.push([x, x + w]),
     };
     let x = 16;
-    const end = def.len - 14;
+    const end = lv.len - 14;
+    const pool = def.pool.filter((n) => diff.skip.indexOf(n) < 0);
     let last = null;
     while (x < end) {
       let name;
-      do { name = def.pool[Math.floor(rnd() * def.pool.length)]; } while (name === last && rnd() < 0.7);
+      do { name = pool[Math.floor(rnd() * pool.length)]; } while (name === last && rnd() < 0.7);
       last = name;
       const pat = P[name];
       pat.add(L, x);
-      x += pat.w + def.gap[0] + rnd() * (def.gap[1] - def.gap[0]);
+      const w = pat.wf ? pat.wf(diff.speed) : pat.w;
+      // gaps are defined in tiles at speed 9; convert to time so the rest between obstacles scales with the difficulty
+      x += w + (def.gap[0] + rnd() * (def.gap[1] - def.gap[0])) * (diff.speed / 9) * diff.rest;
     }
     // ground segments = everything except holes
     lv.holes.sort((a, b) => a[0] - b[0]);
     let cur = -30;
     for (const [a, b] of lv.holes) { if (a > cur) lv.ground.push([cur, a]); cur = b; }
-    lv.ground.push([cur, def.len + 40]);
+    lv.ground.push([cur, lv.len + 40]);
     for (const [a, b] of lv.ground) lv.solids.push({ k: 0, x: a, y: -30, w: b - a, h: 30, ground: true });
 
     const put = (o, w) => {
@@ -117,7 +137,7 @@
     if (p.grounded && held) { p.vy = C.JUMP; p.grounded = false; p.jumps++; }
 
     // --- move x: any deep overlap with a solid is a crash
-    p.x += C.SPEED * DT;
+    p.x += lv.speed * DT;
     let c0 = Math.floor(p.x), c1 = Math.floor(p.x + SIZE);
     for (let c = c0; c <= c1; c++) {
       const col = lv.cols.get(c); if (!col) continue;
@@ -201,5 +221,5 @@
     return null;
   }
 
-  return { C, LEVELS, PATTERNS: P, buildLevel, newPlayer, step, frame, solvable, mulberry32 };
+  return { C, LEVELS, DIFFS, PATTERNS: P, buildLevel, newPlayer, step, frame, solvable, mulberry32 };
 });

@@ -1,13 +1,13 @@
 /* Claude Dash — rendering, input, audio, menus. */
 (function () {
   'use strict';
-  const { C, LEVELS, buildLevel, newPlayer, step } = DashCore;
+  const { C, LEVELS, DIFFS, buildLevel, newPlayer, step } = DashCore;
   const $ = (id) => document.getElementById(id);
   const canvas = $('c'), ctx = canvas.getContext('2d');
 
   // ---------- storage (safe) ----------
   const store = {
-    data: { char: 'claude', best: {}, sound: true },
+    data: { char: 'claude', diff: 'hard', best: {}, sound: true },
     load() { try { Object.assign(this.data, JSON.parse(localStorage.getItem('claudedash') || '{}')); } catch (e) {} },
     save() { try { localStorage.setItem('claudedash', JSON.stringify(this.data)); } catch (e) {} },
   };
@@ -85,7 +85,7 @@
   // ---------- game state ----------
   const G = {
     mode: 'menu',       // menu | play | dead | pause | win
-    def: null, lv: null, p: null, hero: heroById(store.data.char),
+    def: null, diff: DIFFS.find((d) => d.id === store.data.diff) || DIFFS[1], lv: null, p: null, hero: heroById(store.data.char),
     attempt: 1, held: false, acc: 0, last: 0, cam: 0, deadT: 0, shake: 0,
     rot: 0, parts: [], trailT: 0, bestRun: 0, flash: 0, winT: 0,
   };
@@ -97,8 +97,9 @@
     G.cam = -3; G.mode = 'play';
     Snd.musicStart(G.def.hue < 100 ? 49 : G.def.hue < 250 ? 55 : 58.27);
   }
+  const bestKey = (def) => def.id + ':' + G.diff.id;
   function startLevel(def) {
-    G.def = def; G.lv = buildLevel(def); G.attempt = 1; G.bestRun = 0;
+    G.def = def; G.lv = buildLevel(def, G.diff); G.attempt = 1; G.bestRun = 0;
     hide('menu'); show('btnPause'); startAttempt();
   }
   function toMenu() {
@@ -162,9 +163,17 @@
       b.onclick = () => { G.hero = ch; store.data.char = ch.id; store.save(); renderMenu(); };
       chars.appendChild(b);
     }
+    const diffs = $('diffs'); diffs.innerHTML = '';
+    for (const d of DIFFS) {
+      const b = document.createElement('button');
+      b.className = 'diff d-' + d.id + (d.id === G.diff.id ? ' sel' : '');
+      b.innerHTML = '<b>' + d.name + '</b><span>' + ({ easy: 'спокойно', hard: 'быстро', swin: 'хрю-ад' })[d.id] + '</span>';
+      b.onclick = () => { G.diff = d; store.data.diff = d.id; store.save(); renderMenu(); };
+      diffs.appendChild(b);
+    }
     const lvls = $('levels'); lvls.innerHTML = '';
     for (const def of LEVELS) {
-      const best = store.data.best[def.id] || 0, b = document.createElement('button');
+      const best = store.data.best[bestKey(def)] || 0, b = document.createElement('button');
       b.className = 'level';
       b.innerHTML = '<div class="nm">' + def.name + '</div><div class="st">' + '★'.repeat(def.stars) + '☆'.repeat(5 - def.stars) +
         '</div><div class="best">Рекорд: ' + best + '%</div><div class="bar"><i style="width:' + best + '%"></i></div>';
@@ -190,13 +199,13 @@
     burst(p.x + C.SIZE / 2, p.y + C.SIZE / 2, 26, G.hero.colors, 9);
     const pct = Math.min(99, Math.floor((p.x / G.lv.len) * 100));
     G.bestRun = Math.max(G.bestRun, pct); G.lastPct = pct;
-    if (pct > (store.data.best[G.def.id] || 0)) { store.data.best[G.def.id] = pct; store.save(); }
+    if (pct > (store.data.best[bestKey(G.def)] || 0)) { store.data.best[bestKey(G.def)] = pct; store.save(); }
   }
   function onWin() {
     G.mode = 'win'; Snd.musicStop(); Snd.win();
-    store.data.best[G.def.id] = 100; store.save();
+    store.data.best[bestKey(G.def)] = 100; store.save();
     burst(G.p.x + 1, G.p.y + 1, 50, ['#ffd24a', '#ff7a45', '#5ad1ff', '#9dff8a'], 10);
-    $('winStats').textContent = G.def.name + ' — попыток: ' + G.attempt;
+    $('winStats').textContent = G.def.name + ' · ' + G.diff.name + ' — попыток: ' + G.attempt;
     $('winImg').src = G.hero.src; G.winT = 0;
     setTimeout(() => { if (G.mode === 'win') show('win'); }, 700);
   }
@@ -318,6 +327,7 @@
     // attempt text (world space)
     ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 ' + (TILE * 0.8) + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('Попытка ' + G.attempt, sx(6), sy(4.5));
+    ctx.font = '700 ' + (TILE * 0.4) + 'px system-ui,sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.fillText(G.diff.name, sx(6), sy(4.5) + TILE * 0.55);
 
     // particles
     for (const q of G.parts) {

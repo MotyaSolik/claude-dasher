@@ -15,7 +15,7 @@ canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
 h2 { margin: 0 0 6px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: #9aa6d6; }
 .block { margin-bottom: 10px; }
 
-.chars, .levels { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.chars, .levels, .diffs { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
 .char, .level { background: var(--card); border: 2px solid var(--line); border-radius: 14px; color: var(--text); cursor: pointer;
   font: inherit; transition: transform .12s, border-color .12s, box-shadow .12s; }
 .char { width: 130px; padding: 8px 6px 6px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -57,3 +57,15 @@ button { font-family: inherit; }
   .char { width: 104px; padding: 4px; } .char .pic { width: 60px; height: 50px; }
   .level { padding: 6px 10px; min-width: 150px; } .block { margin-bottom: 6px; } .hint { display: none; }
 }
+
+.diffs { display: flex; gap: 8px; justify-content: center; }
+.diff { flex: 1 1 0; max-width: 150px; background: var(--card); border: 2px solid var(--line); border-radius: 12px; color: var(--text); cursor: pointer;
+  padding: 6px 8px; display: flex; flex-direction: column; align-items: center; gap: 1px; font: inherit; transition: transform .12s, border-color .12s; }
+.diff b { font-size: 15px; letter-spacing: .06em; }
+.diff span { font-size: 11px; color: #8791bd; }
+.diff:active { transform: scale(.97); }
+.diff.d-easy.sel { border-color: #5ee08a; box-shadow: 0 0 16px rgba(94, 224, 138, .3); }
+.diff.d-hard.sel { border-color: var(--accent2); box-shadow: 0 0 16px rgba(255, 210, 74, .3); }
+.diff.d-swin.sel { border-color: #ff4d9a; box-shadow: 0 0 18px rgba(255, 77, 154, .45); }
+.diff.d-swin b { color: #ff7ab8; }
+@media (max-height: 460px) { .diff { padding: 3px 6px; } .diff span { display: none; } }
