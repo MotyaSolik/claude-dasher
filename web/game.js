@@ -22,6 +22,8 @@
   for (const ch of CHARS) { ch.img = new Image(); ch.img.src = ch.src; }
   const heroById = (id) => CHARS.find((c) => c.id === id) || CHARS[0];
 
+  const emit = (ev, a, b) => { if (window.DashMods) DashMods.emit(ev, a, b); };
+  const hooked = (ev) => !!(window.DashMods && DashMods.has(ev));
   const MODE_NAME = { cube: 'Куб', ship: 'Корабль', wave: 'Волна' };
   const MODE_COL = { cube: '#ffa24a', ship: '#ff4d9a', wave: '#4dd8ff' };
 
@@ -111,20 +113,23 @@
     G.p = newPlayer(); G.rot = 0; G.ang = 0; G.mc = 0; G.wtrail.length = 0; G.parts.length = 0;
     G.deadT = 0; G.acc = 0; G.flash = 0; G.cam = -3; G.mode = 'play'; metrics();
     Snd.musicStart(rootNote(G.def));
+    emit('attempt', G.attempt);
   }
   function begin() {
     G.attempt = 1; G.bestRun = 0;
-    hide('menu'); hide('editor'); hide('pause'); hide('win'); show('btnPause'); startAttempt();
+    hide('menu'); hide('editor'); hide('pause'); hide('win'); show('btnPause');
+    emit('start', hostState()); startAttempt();
   }
-  function startLevel(def) { G.def = def; G.lv = buildLevel(def, G.diff); G.testing = false; begin(); }
+  function startLevel(def) { G.def = def; G.lv = buildLevel(def, G.diff); G.testing = false; emit('levelBuilt', G.lv); begin(); }
   function startCustom(data, testing) {
     G.def = { id: 'custom:' + data.id, name: data.name || 'Мой уровень', hue: data.hue || 200, custom: true };
-    G.lv = buildCustom(data, G.diff); G.testing = !!testing; begin();
+    G.lv = buildCustom(data, G.diff); G.testing = !!testing; emit('levelBuilt', G.lv); begin();
   }
   function leave() { if (G.testing) { const d = G.editing; G.testing = false; openEditor(d); } else toMenu(); }
   function toMenu() {
     Snd.musicStop(); G.mode = 'menu'; G.testing = false; metrics();
     hide('pause'); hide('win'); hide('btnPause'); hide('editor'); show('menu'); renderMenu();
+    emit('menu');
   }
   function pause() {
     if (G.mode !== 'play' && G.mode !== 'dead') return;
@@ -178,6 +183,7 @@
   window.__back = () => {
     if (G.mode === 'play' || G.mode === 'dead') { pause(); return true; }
     if (G.mode === 'pause' || G.mode === 'win') { leave(); return true; }
+    if (modsOpen) { closeMods(); return true; }
     if (G.mode === 'edit') { if (!$('edCodePanel').classList.contains('hidden')) hide('edCodePanel'); else edExit(); return true; }
     return false;
   };
@@ -190,7 +196,7 @@
     for (const ch of CHARS) {
       const b = document.createElement('button');
       b.className = 'char' + (ch.id === G.hero.id ? ' sel' : '');
-      b.innerHTML = '<div class="pic"><img alt="" src="' + ch.src + '"></div><b>' + ch.name + '</b>';
+      b.innerHTML = '<div class="pic"><img alt="" src="' + esc(ch.src) + '"></div><b>' + esc(ch.name) + '</b>';
       b.onclick = () => { G.hero = ch; store.data.char = ch.id; store.save(); renderMenu(); };
       chars.appendChild(b);
     }
@@ -212,7 +218,7 @@
       b.onclick = () => { Snd.init(); startLevel(def); };
       lvls.appendChild(b);
     }
-    renderCustom();
+    renderCustom(); renderModLevels(); renderModButtons();
     renderSoundBtn();
   }
   function esc(s) { return String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]); }
@@ -252,10 +258,11 @@
     burst(p.x + p.sz / 2, p.y + p.sz / 2, 26, G.hero.colors, 9);
     const pct = Math.min(99, Math.floor((p.x / G.lv.len) * 100));
     G.bestRun = Math.max(G.bestRun, pct); G.lastPct = pct;
+    emit('death', { percent: pct, crash: p.crash, x: p.x, y: p.y, attempt: G.attempt });
     if (!G.testing && pct > (store.data.best[bestKey(G.def)] || 0)) { store.data.best[bestKey(G.def)] = pct; store.save(); }
   }
   function onWin() {
-    G.mode = 'win'; Snd.musicStop(); Snd.win();
+    G.mode = 'win'; Snd.musicStop(); Snd.win(); emit('win', { attempt: G.attempt });
     if (!G.testing) { store.data.best[bestKey(G.def)] = 100; store.save(); }
     burst(G.p.x + 1, G.p.y + 1, 50, ['#ffd24a', '#ff7a45', '#5ad1ff', '#9dff8a'], 10);
     $('winStats').textContent = G.def.name + ' · ' + G.diff.name + ' — попыток: ' + G.attempt;
@@ -277,21 +284,24 @@
     if (G.mode === 'win') { G.winT += dt; return; }
     if (G.mode !== 'play') return;
 
-    const p = G.p;
+    const p = G.p, stepHook = hooked('step');
     G.acc += dt; if (G.acc > 0.1) G.acc = 0.1;
     while (G.acc >= C.DT && !p.dead && !p.won) {
       const j = p.jumps, pads = p.padHit || 0;
       step(G.lv, p, G.held);
-      if (p.jumps !== j) Snd.jump();
+      if (stepHook) emit('step', p);
+      if (p.jumps !== j) { Snd.jump(); emit('jump'); }
       if ((p.padHit || 0) !== pads) { Snd.pad(); burst(p.x + 0.45, p.y, 8, ['#ffe066', '#fff'], 4); }
       G.acc -= C.DT;
     }
     if (p.modeChanged !== G.mc) {
       G.mc = p.modeChanged; Snd.portal(); G.rot = 0; G.wtrail.length = 0;
       burst(p.x + p.sz / 2, p.y + p.sz / 2, 14, [MODE_COL[p.mode], '#fff'], 6);
+      emit('portal', p.mode);
     }
     if (p.dead) return onDeath();
     if (p.won) return onWin();
+    emit('frame', dt);
 
     const sp = G.lv.speed;
     if (p.mode === 'cube') {
@@ -478,6 +488,7 @@
       const s = q.s * TILE; ctx.fillRect(sx(q.x) - s / 2, sy(q.y) - s / 2, s, s);
     }
     ctx.globalAlpha = 1;
+    if (hooked('render:world')) hookDraw('render:world');
     if (G.mode === 'play' || G.mode === 'win') drawPlayer(p);
     ctx.restore();
 
@@ -491,7 +502,14 @@
       ctx.fillStyle = MODE_COL[p.mode]; ctx.font = '800 12px system-ui,sans-serif'; ctx.textAlign = 'right';
       ctx.fillText(MODE_NAME[p.mode].toUpperCase(), bx - 8, by + 10);
     }
+    if (hooked('render:hud')) hookDraw('render:hud');
     if (G.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + G.flash * 1.4 + ')'; ctx.fillRect(0, 0, W, H); }
+  }
+
+  function hookDraw(ev) {
+    ctx.save();
+    emit(ev, { ctx, W, H, TILE, camX, sx, sy, t: G.p ? G.p.t : 0, state: hostState() });
+    ctx.restore();
   }
 
   // animated backdrop behind the menu
@@ -692,6 +710,210 @@
     } catch (e) { msg.textContent = 'Не получилось прочитать код. Скопируй его целиком, он начинается с CD1:'; }
   };
 
+
+  // ======================================================================
+  // Mods: host (what the Mod API may touch) + mods screen
+  // ======================================================================
+  if (!Array.isArray(store.data.mods)) store.data.mods = [];
+  const modButtons = [];
+  G.modLevels = [];
+  let modsOpen = false, modLoading = false;
+  const clampN = (v, lo, hi, d) => (typeof v === 'number' && isFinite(v) ? Math.max(lo, Math.min(hi, v)) : d);
+
+  function hostState() {
+    const p = G.p;
+    return {
+      mode: G.mode, attempt: G.attempt, hero: G.hero.id, difficulty: G.diff.id, testing: G.testing, held: G.held,
+      level: G.lv && G.def ? { id: G.def.id, name: G.def.name, len: G.lv.len, speed: G.lv.speed } : null,
+      player: p ? { x: p.x, y: p.y, vy: p.vy, mode: p.mode, size: p.sz, grounded: p.grounded, dead: p.dead } : null,
+    };
+  }
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hidden'), 2600);
+  }
+  function cleanObjs(list, len) {
+    const ok = (v, a, b) => Number.isInteger(v) && v >= a && v <= b, out = [];
+    for (const q of (Array.isArray(list) ? list : []).slice(0, 5000)) {
+      if (!q) continue;
+      if (q.t === 'h' && ok(q.x, 0, len)) out.push({ t: 'h', x: q.x });
+      else if (q.t === 'g' && ok(q.x, 0, len) && DashCore.MODES.indexOf(q.m) >= 0) out.push({ t: 'g', x: q.x, m: q.m });
+      else if ((q.t === 'b' || q.t === 'p') && ok(q.x, 0, len) && ok(q.y, 0, 6)) out.push({ t: q.t, x: q.x, y: q.y });
+      else if (q.t === 's' && ok(q.x, 0, len) && ok(q.y, 0, 6)) out.push({ t: 's', x: q.x, y: q.y, d: q.d ? 1 : 0 });
+    }
+    return out;
+  }
+
+  const host = {
+    core: DashCore,
+    onModError() { if (modsOpen) renderMods(); },
+    addHero(h, modId) {
+      if (!h || typeof h !== 'object') throw new Error('heroes.add ждёт объект');
+      if (typeof h.id !== 'string' || !/^[a-z0-9_-]{1,30}$/.test(h.id)) throw new Error('id героя: a-z 0-9 _ -');
+      if (CHARS.some((c) => c.id === h.id)) throw new Error('герой «' + h.id + '» уже существует');
+      if (typeof h.src !== 'string' || !/^(data:image\/(png|jpeg|webp|gif);base64,|https:\/\/|img\/)/.test(h.src)) throw new Error('src героя: data:image/..., https://... или img/...');
+      const col = (v, d) => (typeof v === 'string' && v.length <= 40 ? v : d);
+      const cs = Array.isArray(h.colors) ? h.colors : [];
+      const ch = { id: h.id, name: String(h.name || h.id).slice(0, 20), src: h.src, mod: modId,
+        colors: [col(cs[0], '#e07b55'), col(cs[1], '#f4a27f'), col(cs[2], '#ffffff')], img: new Image() };
+      ch.img.src = ch.src; CHARS.push(ch);
+      if (!modLoading && G.mode === 'menu') renderMenu();
+    },
+    listHeroes() { return CHARS.map((c) => ({ id: c.id, name: c.name })); },
+    addLevel(l, modId) {
+      if (!l || typeof l !== 'object') throw new Error('levels.add ждёт объект');
+      const id = 'mod:' + modId + ':' + String(l.id || 'level').slice(0, 30).replace(/[^a-z0-9_-]/gi, '_');
+      if (G.modLevels.some((x) => x.id === id)) throw new Error('уровень «' + l.id + '» уже добавлен');
+      const name = String(l.name || 'Уровень мода').slice(0, 30);
+      if (Array.isArray(l.plan)) {
+        const plan = l.plan.slice(0, 30).map((s) => ({ m: DashCore.MODES.indexOf(s && s.m) >= 0 ? s.m : 'cube', len: Math.round(clampN(s && s.len, 40, 1500, 100)) }));
+        if (!plan.length) throw new Error('plan пустой');
+        const pool = (Array.isArray(l.pool) ? l.pool : ['spike1', 'spike2', 'block1']).filter((n) => n in DashCore.PATTERNS);
+        if (!pool.length) throw new Error('pool: нет известных узоров (' + Object.keys(DashCore.PATTERNS).join(', ') + ')');
+        const g0 = clampN(Array.isArray(l.gap) ? l.gap[0] : 6, 2, 30, 6), g1 = clampN(Array.isArray(l.gap) ? l.gap[1] : 9, g0 + 0.1, 40, g0 + 3);
+        const def = { id, name, stars: Math.round(clampN(l.stars, 1, 5, 3)), seed: Math.round(clampN(l.seed, 0, 1e6, 1)),
+          hue: Math.round(clampN(l.hue, 0, 360, 200)), plan, gap: [g0, g1], pool };
+        G.modLevels.push({ modId, id, kind: 'gen', def });
+      } else {
+        const len = Math.round(clampN(l.len, 40, 600, 100));
+        G.modLevels.push({ modId, id, kind: 'data', data: { id, name, len, hue: Math.round(clampN(l.hue, 0, 360, 200)), objs: cleanObjs(l.objs, len) } });
+      }
+      if (!modLoading && G.mode === 'menu') renderMenu();
+    },
+    lvAdd(lv, kind, o) { return DashCore.addObject(lv, kind, o || {}); },
+    addButton(label, fn, modId) {
+      if (typeof fn !== 'function') throw new Error('menuButton ждёт функцию');
+      modButtons.push({ modId, label, fn });
+      if (!modLoading && G.mode === 'menu') renderModButtons();
+    },
+    toast,
+    particle(p) {
+      if (G.parts.length > 800) return;
+      G.parts.push({ x: clampN(+p.x, -100, 5000, 0), y: clampN(+p.y, -50, 100, 0), vx: clampN(+p.vx, -50, 50, 0), vy: clampN(+p.vy, -50, 50, 0), life: 0,
+        max: clampN(+p.life, 0.05, 3, 0.5), s: clampN(+p.size, 0.02, 2, 0.15), c: typeof p.color === 'string' && p.color.length <= 40 ? p.color : '#fff' });
+    },
+    burst(x, y, n, cols, spd) { burst(clampN(+x, -100, 5000, 0), clampN(+y, -50, 100, 0), n, cols, spd); },
+    beep(f0, f1, dur, type, vol) { if (Snd.on()) Snd.osc(type, f0, f1, Snd.ctx.currentTime, dur, vol); },
+    getData(modId, k, d) { const m = store.data.modData && store.data.modData[modId]; return m && k in m ? m[k] : d; },
+    setData(modId, k, v) {
+      let s; try { s = JSON.stringify(v); } catch (e) { throw new Error('storage.set: значение не сериализуется'); }
+      if (s === undefined || s.length > 20000) throw new Error('storage.set: слишком большое значение (до 20 КБ)');
+      store.data.modData = store.data.modData || {};
+      (store.data.modData[modId] = store.data.modData[modId] || {})[k] = JSON.parse(s); store.save();
+    },
+    state: hostState,
+    restart() { if (G.mode === 'play' || G.mode === 'dead') restart(); },
+    setHero(id) { const c = CHARS.find((x) => x.id === id); if (c) { G.hero = c; store.data.char = id; store.save(); } },
+    removeByMod(modId) {
+      for (let i = CHARS.length - 1; i >= 0; i--) if (CHARS[i].mod === modId) CHARS.splice(i, 1);
+      G.modLevels = G.modLevels.filter((x) => x.modId !== modId);
+      for (let i = modButtons.length - 1; i >= 0; i--) if (modButtons[i].modId === modId) modButtons.splice(i, 1);
+    },
+  };
+
+  function renderModLevels() {
+    const box = $('modLevels'), wrap = $('modLevelsBlock');
+    box.innerHTML = ''; wrap.classList.toggle('hidden', !G.modLevels.length);
+    for (const m of G.modLevels) {
+      const row = document.createElement('div'); row.className = 'crow';
+      const nm = m.kind === 'gen' ? m.def.name : m.data.name;
+      row.innerHTML = '<div class="cname"><b>' + esc(nm) + '</b><span>из мода ' + esc(m.modId) + '</span></div>';
+      const b = document.createElement('button'); b.className = 'small go'; b.textContent = '▶ Играть';
+      b.onclick = () => { Snd.init(); if (m.kind === 'gen') startLevel(m.def); else startCustom(m.data, false); };
+      row.appendChild(b); box.appendChild(row);
+    }
+  }
+  function renderModButtons() {
+    const box = $('modButtons'); box.innerHTML = '';
+    for (const m of modButtons) {
+      const b = document.createElement('button'); b.className = 'small'; b.textContent = m.label;
+      b.onclick = () => { try { m.fn(); } catch (e) { toast('Ошибка мода: ' + ((e && e.message) || e)); } };
+      box.appendChild(b);
+    }
+  }
+
+  function reloadMods() {
+    if (!window.DashMods) return;
+    modLoading = true;
+    try { DashMods.reloadAll(store.data.mods.filter((m) => m.enabled)); } finally { modLoading = false; }
+    let dirty = false;
+    for (const m of store.data.mods) { const st = DashMods.status.get(m.uid); if (st && st.meta && (!m.meta || m.meta.name !== st.meta.name)) { m.meta = st.meta; dirty = true; } }
+    if (dirty) store.save();
+    G.hero = heroById(store.data.char);
+    if (G.mode === 'menu') renderMenu();
+    if (modsOpen) renderMods();
+  }
+  function setMsg(t, bad) { const m = $('modMsg'); m.textContent = t; m.style.color = bad ? '#ff8a9a' : ''; }
+  function installSource(src, from) {
+    src = String(src || '');
+    if (!src.trim()) return setMsg('Код пустой.', true);
+    if (src.length > 150000) return setMsg('Мод слишком большой (максимум 150 КБ).', true);
+    const entry = { uid: 'm' + Date.now().toString(36) + Math.floor(Math.random() * 1e5).toString(36), src, enabled: true, from };
+    store.data.mods.push(entry); reloadMods();
+    const st = DashMods.status.get(entry.uid);
+    if (!st || !st.meta) {
+      store.data.mods = store.data.mods.filter((m) => m !== entry); reloadMods();
+      return setMsg('Не установлен: ' + (st ? st.error : 'ошибка загрузки'), true);
+    }
+    store.save(); renderMods();
+    setMsg(st.ok ? 'Установлен: ' + st.meta.name : 'Установлен, но с ошибкой: ' + st.error, !st.ok);
+    $('modSrc').value = '';
+  }
+
+  function openMods() { modsOpen = true; hide('menu'); show('mods'); setMsg(''); renderMods(); }
+  function closeMods() { modsOpen = false; hide('mods'); show('menu'); renderMenu(); }
+  function renderMods() {
+    const list = $('modList'); list.innerHTML = '';
+    if (!window.DashMods) { list.textContent = 'Загрузчик модов недоступен.'; return; }
+    if (!store.data.mods.length) { const e = document.createElement('div'); e.className = 'empty'; e.textContent = 'Модов нет. Установи пример ниже или вставь свой код.'; list.appendChild(e); }
+    for (const m of store.data.mods) {
+      const st = DashMods.status.get(m.uid), meta = (st && st.meta) || m.meta || { name: 'Мод', version: '', author: '', description: '' };
+      const row = document.createElement('div'); row.className = 'mrow' + (m.enabled ? '' : ' off');
+      const info = document.createElement('div'); info.className = 'minfo';
+      const t = document.createElement('b'); t.textContent = meta.name + (meta.version ? '  v' + meta.version : '');
+      const d = document.createElement('span'); d.textContent = [meta.author, meta.description].filter(Boolean).join(' — ');
+      const s = document.createElement('em');
+      if (!m.enabled) s.textContent = 'выключен'; else if (st && st.error) { s.textContent = 'ошибка: ' + st.error; s.className = 'bad'; } else s.textContent = 'работает';
+      info.append(t, d, s);
+      const tg = document.createElement('button'); tg.className = 'small'; tg.textContent = m.enabled ? 'Выключить' : 'Включить';
+      tg.onclick = () => { m.enabled = !m.enabled; store.save(); reloadMods(); };
+      const del = document.createElement('button'); del.className = 'small del'; del.textContent = '🗑';
+      del.onclick = () => {
+        if (del.dataset.arm) { store.data.mods = store.data.mods.filter((x) => x !== m); store.save(); reloadMods(); return; }
+        del.dataset.arm = '1'; del.textContent = 'Удалить?'; setTimeout(() => { del.dataset.arm = ''; del.textContent = '🗑'; }, 2500);
+      };
+      row.append(info, tg, del); list.appendChild(row);
+    }
+    const ex = $('modExamples'); ex.innerHTML = '';
+    for (const e of window.DashExamples || []) {
+      const row = document.createElement('div'); row.className = 'mrow';
+      const info = document.createElement('div'); info.className = 'minfo';
+      const t = document.createElement('b'); t.textContent = e.name; const d = document.createElement('span'); d.textContent = e.desc; info.append(t, d);
+      const have = store.data.mods.some((m) => m.src === e.src);
+      const b = document.createElement('button'); b.className = 'small' + (have ? '' : ' go'); b.textContent = have ? 'Установлен' : 'Добавить'; b.disabled = have;
+      b.onclick = () => installSource(e.src, 'example');
+      row.append(info, b); ex.appendChild(row);
+    }
+  }
+  $('btnMods').onclick = openMods;
+  $('modClose').onclick = closeMods;
+  $('modInstall').onclick = () => installSource($('modSrc').value, 'paste');
+  $('modFileBtn').onclick = () => $('modFile').click();
+  $('modFile').onchange = (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    const r = new FileReader(); r.onload = () => installSource(String(r.result), 'file'); r.onerror = () => setMsg('Не удалось прочитать файл.', true);
+    r.readAsText(f); e.target.value = '';
+  };
+  $('modUrlBtn').onclick = () => {
+    const u = $('modUrl').value.trim();
+    if (!/^https?:\/\//i.test(u)) return setMsg('Ссылка должна начинаться с http:// или https://', true);
+    setMsg('Скачиваю…');
+    const ac = new AbortController(), to = setTimeout(() => ac.abort(), 10000);
+    fetch(u, { signal: ac.signal, cache: 'no-store' }).then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.text(); })
+      .then((t) => { clearTimeout(to); installSource(t, 'url'); })
+      .catch(() => { clearTimeout(to); setMsg('Не удалось скачать: ссылка недоступна или сайт не разрешает загрузку из игры. Открой ссылку, скопируй код и вставь его в поле выше.', true); });
+  };
+
   // ---------- main loop ----------
   function frame(now) {
     const dt = Math.min(0.05, (now - (G.last || now)) / 1000); G.last = now; menuT += dt;
@@ -701,6 +923,8 @@
   }
 
   renderMenu();
+  if (window.DashMods) { DashMods.init(host); reloadMods(); }
   requestAnimationFrame(frame);
+  window.__mods = { host, reload: reloadMods, install: installSource };
   window.__game = G; // handy for debugging / tests
 })();

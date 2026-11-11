@@ -40,12 +40,40 @@
       <div id="customList" class="clist"></div>
     </div>
 
+    <div id="modLevelsBlock" class="block hidden">
+      <h2>Уровни из модов</h2>
+      <div id="modLevels" class="clist"></div>
+    </div>
+
     <div class="foot">
+      <button id="btnMods" class="small">🧩 Моды</button>
+      <span id="modButtons" class="cbtns" style="margin:0"></span>
       <button id="btnSound" class="small">🔊 Звук: вкл</button>
       <span class="hint">Тап / пробел / клик — прыжок. Зажми — прыгай подряд.</span>
     </div>
   </div>
 </section>
+
+<section id="mods" class="screen hidden">
+  <div class="card modcard">
+    <div class="mhead"><h2>Моды</h2><button id="modClose" class="small">← Назад</button></div>
+    <p class="warn">Мод — это код. Он выполняется внутри игры и может менять её как угодно. Ставь только те моды, которым доверяешь. Описание API: docs/MODDING.md в репозитории.</p>
+    <div id="modList" class="mlist"></div>
+    <h2>Добавить мод</h2>
+    <textarea id="modSrc" rows="5" spellcheck="false" placeholder="Вставь код мода: ClaudeDash.register({ ... })"></textarea>
+    <div class="cbtns">
+      <button id="modInstall" class="small go">Установить код</button>
+      <button id="modFileBtn" class="small">Из файла…</button>
+      <input id="modFile" type="file" accept=".js,text/javascript,application/javascript" hidden>
+    </div>
+    <div class="urlrow"><input id="modUrl" type="url" placeholder="https://…/mod.js" autocomplete="off"><button id="modUrlBtn" class="small">Скачать</button></div>
+    <div id="modMsg" class="hint"></div>
+    <h2>Примеры</h2>
+    <div id="modExamples" class="mlist"></div>
+  </div>
+</section>
+
+<div id="toast" class="toast hidden"></div>
 
 <section id="editor" class="hidden">
   <div class="edtop">
@@ -100,6 +128,8 @@
 </section>
 
 <script src="core.js"></script>
+<script src="mods.js"></script>
+<script src="examples.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
