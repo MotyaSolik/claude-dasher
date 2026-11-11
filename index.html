@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0f1a">
+<title>Claude Dash</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<button id="btnPause" class="hidden" aria-label="Пауза">❚❚</button>
+
+<section id="menu" class="screen">
+  <div class="menu-inner">
+    <h1 class="title"><span>CLAUDE</span> <span class="dash">DASH</span></h1>
+
+    <div class="block">
+      <h2>Выбери героя</h2>
+      <div id="chars" class="chars"></div>
+    </div>
+
+    <div class="block">
+      <h2>Сложность</h2>
+      <div id="diffs" class="diffs"></div>
+    </div>
+
+    <div class="block">
+      <h2>Уровень</h2>
+      <div id="levels" class="levels"></div>
+    </div>
+
+    <div class="foot">
+      <button id="btnSound" class="small">🔊 Звук: вкл</button>
+      <span class="hint">Тап / пробел / клик — прыжок. Зажми — прыгай подряд.</span>
+    </div>
+  </div>
+</section>
+
+<section id="pause" class="screen hidden">
+  <div class="card">
+    <h2>Пауза</h2>
+    <button id="btnResume" class="big">▶ Продолжить</button>
+    <button id="btnRestart" class="big alt">↻ Заново</button>
+    <button id="btnMenu" class="big alt">☰ В меню</button>
+  </div>
+</section>
+
+<section id="win" class="screen hidden">
+  <div class="card">
+    <h2>Уровень пройден!</h2>
+    <p id="winStats"></p>
+    <img id="winImg" alt="">
+    <button id="btnAgain" class="big">↻ Ещё раз</button>
+    <button id="btnNext" class="big alt">Следующий ▶</button>
+    <button id="btnMenu2" class="big alt">☰ В меню</button>
+  </div>
+</section>
+
+<script src="core.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
