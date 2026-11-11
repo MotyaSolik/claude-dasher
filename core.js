@@ -227,6 +227,18 @@
     return finalize(lv);
   }
 
+  // add an object to an already built level (used by mods); returns false when the input is invalid
+  function addObject(lv, kind, o) {
+    const n = (v, d) => (typeof v === 'number' && isFinite(v) ? Math.max(-50, Math.min(2000, v)) : d);
+    const x = n(o.x), y = n(o.y);
+    if (x === undefined || y === undefined) return false;
+    if (kind === 'block') { const b = { k: 0, x, y, w: Math.max(0.1, n(o.w, 1)), h: Math.max(0.1, n(o.h, 1)) }; lv.solids.push(b); putCol(lv.cols, b, b.w); }
+    else if (kind === 'spike') { const s = { k: 1, x, y, d: o.d ? 1 : 0 }; lv.spikes.push(s); putCol(lv.cols, s, 1); }
+    else if (kind === 'pad') { const p = { k: 2, x, y }; lv.pads.push(p); putCol(lv.cols, p, 1); }
+    else return false;
+    return true;
+  }
+
   // ---------- physics ----------
   function newPlayer() {
     return { x: 0, y: 0, vy: 0, grounded: true, dead: false, won: false, t: 0, jumps: 0,
@@ -371,6 +383,6 @@
     return sols;
   }
 
-  return { C, MODES, LEVELS, DIFFS, PATTERNS: P, buildLevel, buildCustom, newPlayer, enterAt, step, frame,
+  return { C, MODES, LEVELS, DIFFS, PATTERNS: P, buildLevel, buildCustom, addObject, newPlayer, enterAt, step, frame,
     solvable, replaySegment, mulberry32 };
 });

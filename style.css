@@ -108,3 +108,20 @@ button { font-family: inherit; }
 .codepanel textarea { width: 100%; background: #0c1020; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px; font: 11px monospace;
   -webkit-user-select: text; user-select: text; resize: none; }
 @media (max-height: 460px) { .level .modes { display: none; } }
+
+/* ---- mods ---- */
+.modcard { width: min(600px, 94vw); text-align: left; gap: 8px; }
+.mhead { display: flex; justify-content: space-between; align-items: center; }
+.warn { font-size: 12px; color: #ffcf7a; background: rgba(255, 180, 60, .08); border: 1px solid rgba(255, 180, 60, .3); border-radius: 10px; padding: 7px 10px; }
+.mlist { display: flex; flex-direction: column; gap: 6px; }
+.mrow { display: flex; align-items: center; gap: 6px; background: #0f1426; border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; }
+.mrow.off { opacity: .6; }
+.minfo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.minfo b { font-size: 14px; } .minfo span { font-size: 11px; color: #9aa6d6; overflow-wrap: anywhere; }
+.minfo em { font-size: 11px; font-style: normal; color: #5ee08a; } .minfo em.bad { color: #ff8a9a; overflow-wrap: anywhere; }
+.small:disabled { opacity: .5; cursor: default; }
+.modcard textarea, .urlrow input { width: 100%; background: #0c1020; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 7px; font: 12px monospace;
+  -webkit-user-select: text; user-select: text; resize: vertical; }
+.urlrow { display: flex; gap: 6px; } .urlrow input { font: 13px system-ui, sans-serif; }
+.toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: rgba(20, 26, 48, .96); border: 1px solid var(--line); color: var(--text);
+  border-radius: 12px; padding: 9px 14px; font-size: 13px; z-index: 20; max-width: 90vw; pointer-events: none; }
