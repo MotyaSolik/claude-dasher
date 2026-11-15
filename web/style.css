@@ -166,3 +166,13 @@ button { font-family: inherit; }
 
 .m-ball { color: #8aff5a; } .m-ufo { color: #c77dff; } .m-robot { color: #5affc4; } .m-spider { color: #ffe14a; }
 .tool.t-ball b { color: #8aff5a; } .tool.t-ufo b { color: #c77dff; } .tool.t-robot b { color: #5affc4; } .tool.t-spider b { color: #ffe14a; }
+
+/* ---- locked skins, unlock banner ---- */
+.char .pic { position: relative; }
+.char.locked img { filter: grayscale(1) brightness(.55); }
+.char .lock { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 26px; }
+.char small { font-size: 9px; line-height: 1.2; color: #8791bd; max-width: 112px; text-align: center; }
+.char.locked { cursor: help; }
+.unlock { display: flex; align-items: center; gap: 10px; background: rgba(94, 224, 138, .1); border: 1px solid rgba(94, 224, 138, .45); border-radius: 12px; padding: 8px 10px; text-align: left; }
+.unlock img { width: 48px; height: 48px; object-fit: contain; border-radius: 50%; flex: none; }
+.unlock .uinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; } .unlock .uinfo b { font-size: 13px; color: #5ee08a; } .unlock .uinfo span { font-size: 12px; color: #c8d0f5; }

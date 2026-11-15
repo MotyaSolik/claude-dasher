@@ -7,20 +7,25 @@
 
   // ---------- storage (safe) ----------
   const store = {
-    data: { char: 'claude', diff: 'hard', best: {}, sound: true, custom: [] },
+    data: { char: 'claude', diff: 'hard', best: {}, sound: true, custom: [], unlocked: [] },
     load() { try { Object.assign(this.data, JSON.parse(localStorage.getItem('claudedash') || '{}')); } catch (e) {} },
     save() { try { localStorage.setItem('claudedash', JSON.stringify(this.data)); } catch (e) {} },
   };
   store.load();
   if (!Array.isArray(store.data.custom)) store.data.custom = [];
+  if (!Array.isArray(store.data.unlocked)) store.data.unlocked = [];
 
   // ---------- heroes ----------
   const CHARS = [
     { id: 'claude', name: 'Claude', src: 'img/claude.png', colors: ['#e07b55', '#f4a27f', '#ffffff'] },
     { id: 'pig', name: 'Хрюша', src: 'img/pig.png', colors: ['#e2b9a0', '#f1c9b4', '#c98f86'] },
+    // locked until the level is finished on that difficulty (see grantUnlocks)
+    { id: 'a6', name: 'A6', src: 'img/a6.png', colors: ['#cdbcab', '#e9dfd2', '#ffffff'],
+      unlock: { level: 'l9', diff: 'swin', text: 'Пройди «Thinking Space II» на SWIN' } },
   ];
   for (const ch of CHARS) { ch.img = new Image(); ch.img.src = ch.src; }
-  const heroById = (id) => CHARS.find((c) => c.id === id) || CHARS[0];
+  const isUnlocked = (ch) => !ch.unlock || store.data.unlocked.indexOf(ch.id) >= 0;
+  const heroById = (id) => { const c = CHARS.find((x) => x.id === id); return c && isUnlocked(c) ? c : CHARS[0]; };
 
   // safe mode (launcher button or ?safe=1): installed mods are kept but never run
   const SAFE = /[?&]safe=1/.test(location.search);
@@ -201,9 +206,14 @@
     const chars = $('chars'); chars.innerHTML = '';
     for (const ch of CHARS) {
       const b = document.createElement('button');
-      b.className = 'char' + (ch.id === G.hero.id ? ' sel' : '');
-      b.innerHTML = '<div class="pic"><img alt="" src="' + esc(ch.src) + '"></div><b>' + esc(ch.name) + '</b>';
-      b.onclick = () => { G.hero = ch; store.data.char = ch.id; store.save(); renderMenu(); };
+      const open = isUnlocked(ch);
+      b.className = 'char' + (ch.id === G.hero.id ? ' sel' : '') + (open ? '' : ' locked');
+      b.innerHTML = '<div class="pic"><img alt="" src="' + esc(ch.src) + '">' + (open ? '' : '<span class="lock">🔒</span>') + '</div><b>' + esc(ch.name) + '</b>' +
+        (open ? '' : '<small>' + esc(ch.unlock.text) + '</small>');
+      b.onclick = () => {
+        if (!open) return toast(ch.unlock.text);
+        G.hero = ch; store.data.char = ch.id; store.save(); renderMenu();
+      };
       chars.appendChild(b);
     }
     const diffs = $('diffs'); diffs.innerHTML = '';
@@ -267,12 +277,33 @@
     emit('death', { percent: pct, crash: p.crash, x: p.x, y: p.y, attempt: G.attempt });
     if (!G.testing && pct > (store.data.best[bestKey(G.def)] || 0)) { store.data.best[bestKey(G.def)] = pct; store.save(); }
   }
+  // finishing a level on the required difficulty opens skins. Not in editor tests, not for custom levels,
+  // and not while mods are loaded (a mod can skip levels)
+  function grantUnlocks() {
+    const out = [];
+    if (G.testing || !G.def || G.def.custom) return out;
+    for (const ch of CHARS) {
+      const u = ch.unlock;
+      if (!u || isUnlocked(ch) || G.def.id !== u.level || G.diff.id !== u.diff) continue;
+      if (window.DashMods && DashMods.loaded.length) { toast('Моды включены: скин не открывается. Выключи моды или запусти безопасный режим'); continue; }
+      store.data.unlocked.push(ch.id); out.push(ch);
+    }
+    if (out.length) store.save();
+    return out;
+  }
   function onWin() {
     G.mode = 'win'; Snd.musicStop(); Snd.win(); emit('win', { attempt: G.attempt });
     if (!G.testing) { store.data.best[bestKey(G.def)] = 100; store.save(); }
     burst(G.p.x + 1, G.p.y + 1, 50, ['#ffd24a', '#ff7a45', '#5ad1ff', '#9dff8a'], 10);
     $('winStats').textContent = G.def.name + ' · ' + G.diff.name + ' — попыток: ' + G.attempt;
     $('winImg').src = G.hero.src; G.winT = 0;
+    const fresh = grantUnlocks(), ub = $('winUnlock');
+    ub.classList.toggle('hidden', !fresh.length);
+    if (fresh.length) {
+      const ch = fresh[0]; $('unlockImg').src = ch.src; $('unlockName').textContent = 'Скин ' + ch.name;
+      $('btnWear').classList.remove('hidden'); $('btnWear').onclick = () => { G.hero = ch; store.data.char = ch.id; store.save(); $('winImg').src = ch.src; $('btnWear').classList.add('hidden'); };
+      Snd.win();
+    }
     $('btnNext').classList.toggle('hidden', !!G.def.custom);
     $('btnMenu2').textContent = G.testing ? '✎ В редактор' : '☰ В меню';
     setTimeout(() => { if (G.mode === 'win') show('win'); }, 700);
@@ -800,7 +831,7 @@
       ch.img.src = ch.src; CHARS.push(ch);
       if (!modLoading && G.mode === 'menu') renderMenu();
     },
-    listHeroes() { return CHARS.map((c) => ({ id: c.id, name: c.name })); },
+    listHeroes() { return CHARS.map((c) => ({ id: c.id, name: c.name, locked: !isUnlocked(c) })); },
     addLevel(l, modId) {
       if (!l || typeof l !== 'object') throw new Error('levels.add ждёт объект');
       const id = 'mod:' + modId + ':' + String(l.id || 'level').slice(0, 30).replace(/[^a-z0-9_-]/gi, '_');
@@ -844,7 +875,7 @@
     },
     state: hostState,
     restart() { if (G.mode === 'play' || G.mode === 'dead') restart(); },
-    setHero(id) { const c = CHARS.find((x) => x.id === id); if (c) { G.hero = c; store.data.char = id; store.save(); } },
+    setHero(id) { const c = CHARS.find((x) => x.id === id); if (c && isUnlocked(c)) { G.hero = c; store.data.char = id; store.save(); } },
     removeByMod(modId) {
       for (let i = CHARS.length - 1; i >= 0; i--) if (CHARS[i].mod === modId) CHARS.splice(i, 1);
       G.modLevels = G.modLevels.filter((x) => x.modId !== modId);

@@ -58,7 +58,7 @@ ClaudeDash.register({
 | `api.log(...)` | `console.log` с префиксом мода |
 | `api.on(event, fn)` | подписка на событие, возвращает функцию отписки |
 | `api.physics.get()` / `.set(obj)` | константы физики (см. ниже) |
-| `api.heroes.add({id,name,src,colors})` / `.list()` | свои герои |
+| `api.heroes.add({id,name,src,colors})` / `.list()` | свои герои; `list()` возвращает `{id, name, locked}`, а `setHero` не выбирает закрытые скины |
 | `api.levels.add(level)` | уровень в меню «Уровни из модов» |
 | `api.levels.block(lv,x,y,w,h)` / `.spike(lv,x,y,down)` / `.pad(lv,x,y)` | добавить объект в готовый уровень (из `levelBuilt`) |
 | `api.ui.menuButton(label, fn)` | кнопка в главном меню |

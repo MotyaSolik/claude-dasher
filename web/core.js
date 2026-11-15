@@ -120,6 +120,14 @@
         { m: 'wave', len: 60 }, { m: 'robot', len: 60 }, { m: 'cube', len: 30 }, { m: 'spider', len: 60 }, { m: 'cube', len: 40 }],
       gap: [3.5, 6], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'padSpikes', 'spikeTrain', 'stairs'],
     },
+    {
+      // the hardest level; finishing it on SWIN unlocks the A6 skin
+      id: 'l9', name: 'Thinking Space II', stars: 5, seed: 51, hue: 255,
+      plan: [{ m: 'cube', len: 70 }, { m: 'ship', len: 60 }, { m: 'ball', len: 55 }, { m: 'cube', len: 35 }, { m: 'wave', len: 65 },
+        { m: 'ufo', len: 55 }, { m: 'robot', len: 50 }, { m: 'cube', len: 30 }, { m: 'spider', len: 55 }, { m: 'wave', len: 55 },
+        { m: 'cube', len: 30 }, { m: 'ship', len: 55 }, { m: 'cube', len: 45 }],
+      gap: [3.2, 5.5], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'pitSpike', 'padSpikes', 'padBlock', 'spikeTrain', 'stairs'],
+    },
   ];
 
   // ---------- shared level helpers ----------
