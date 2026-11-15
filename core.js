@@ -121,11 +121,19 @@
       gap: [3.5, 6], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'padSpikes', 'spikeTrain', 'stairs'],
     },
     {
-      // the hardest level; finishing it on SWIN unlocks the A6 skin
+      // the hardest level; finishing it on SWIN unlocks the A6 skin.
+      // Built for music: it lasts exactly 135 s (2:15) on every difficulty and the DROP starts at 25 s:
+      // a calm intro (25 s of easy cube) and then the dense multi-mode part.
       id: 'l9', name: 'Thinking Space II', stars: 5, seed: 51, hue: 255,
-      plan: [{ m: 'cube', len: 70 }, { m: 'ship', len: 60 }, { m: 'ball', len: 55 }, { m: 'cube', len: 35 }, { m: 'wave', len: 65 },
-        { m: 'ufo', len: 55 }, { m: 'robot', len: 50 }, { m: 'cube', len: 30 }, { m: 'spider', len: 55 }, { m: 'wave', len: 55 },
-        { m: 'cube', len: 30 }, { m: 'ship', len: 55 }, { m: 'cube', len: 45 }],
+      seconds: 135, drop: 25,
+      musicHint: { track: 'Nuke Powder', artist: 'MaelouX', offset: 117 },
+      plan: [
+        { m: 'cube', len: 225, gap: [6, 9], pool: ['spike1', 'spike2', 'block1', 'block3', 'pit2', 'stairs', 'blockSpike'] },   // 0:00 - 0:25 intro
+        { m: 'ship', len: 70 }, { m: 'ball', len: 70 }, { m: 'cube', len: 40 }, { m: 'wave', len: 80 }, { m: 'ufo', len: 70 },
+        { m: 'robot', len: 70 }, { m: 'cube', len: 40 }, { m: 'spider', len: 70 }, { m: 'wave', len: 70 }, { m: 'cube', len: 40 },
+        { m: 'ship', len: 70 }, { m: 'ball', len: 60 }, { m: 'cube', len: 30 }, { m: 'ufo', len: 60 }, { m: 'robot', len: 50 },
+        { m: 'spider', len: 60 }, { m: 'cube', len: 40 },
+      ],
       gap: [3.2, 5.5], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'pitSpike', 'padSpikes', 'padBlock', 'spikeTrain', 'stairs'],
     },
   ];
@@ -172,10 +180,14 @@
       pad: (x, y) => lv.pads.push({ k: 2, x, y }),
       hole: (x, w) => lv.holes.push([x, x + w]),
     };
-    const pool = def.pool.filter((n) => diff.skip.indexOf(n) < 0);
-    const plan = def.plan.map((s) => ({ m: s.m, len: Math.round(s.len * sc) }));
+    const okPool = (list) => list.filter((n) => diff.skip.indexOf(n) < 0);
+    const plan = def.plan.map((s) => ({ m: s.m, len: def.seconds ? s.len * sc : Math.round(s.len * sc), pool: s.pool, gap: s.gap, density: s.density }));
+    if (def.seconds) {   // the level lasts exactly `seconds` at every speed: the last section absorbs the rounding
+      const want = def.seconds * diff.speed, have = plan.reduce((a, s) => a + s.len, 0);
+      plan[plan.length - 1].len += want - have;
+    }
     let cx = 0;
-    const secs = plan.map((s) => { const o = { m: s.m, x0: cx, x1: cx + s.len }; cx += s.len; return o; });
+    const secs = plan.map((s) => { const o = { m: s.m, x0: cx, x1: cx + s.len, pool: s.pool, gap: s.gap, density: s.density }; cx += s.len; return o; });
     lv.len = cx;
     secs.forEach((s, i) => { if (i > 0 && s.m !== secs[i - 1].m) lv.portals.push({ k: 3, x: s.x0, mode: s.m }); });
     lv.portals.sort((a, b) => a.x - b.x);
@@ -185,7 +197,7 @@
       const seg = { mode: s.m, x0: s.x0, x1: s.x1 };
       if (s.m === 'cube') {
         let x = i === 0 ? 16 : s.x0 + 10, last_ = null;
-        const end = s.x1 - (last ? 14 : 12);
+        const end = s.x1 - (last ? 14 : 12), pool = okPool(s.pool || def.pool), gap = s.gap || def.gap;
         while (x < end) {
           let name;
           do { name = pool[Math.floor(rnd() * pool.length)]; } while (name === last_ && rnd() < 0.7);
@@ -193,10 +205,10 @@
           const pat = P[name], w = pat.wf ? pat.wf(diff.speed) : pat.w;
           if (x + w > end) break;
           pat.add(L, x);
-          x += w + (def.gap[0] + rnd() * (def.gap[1] - def.gap[0])) * (diff.speed / 9) * diff.rest;
+          x += w + (gap[0] + rnd() * (gap[1] - gap[0])) * (diff.speed / 9) * diff.rest;
         }
       } else {
-        genFlight(lv, rnd, s.m, s.x0, s.x1, diff, seg);
+        genFlight(lv, rnd, s.m, s.x0, s.x1, diff, seg, s.density);
       }
       lv.segments.push(seg);
     });
@@ -205,7 +217,7 @@
 
   // Ship / wave section: first simulate a random hold/release input in an empty corridor, then scatter
   // obstacles only where they stay clear of that trajectory. The input is stored => beatable by construction.
-  function genFlight(lv, rnd, mode, x0, x1, diff, seg) {
+  function genFlight(lv, rnd, mode, x0, x1, diff, seg, density) {
     const tmp = newLevel(lv.def, diff); tmp.len = x1 + 10;
     tmp.portals.push({ k: 3, x: x0, mode });
     putCol(tmp.cols, { k: 0, x: x0 - 5, y: -30, w: x1 - x0 + 20, h: 30 }, x1 - x0 + 20);
@@ -240,7 +252,7 @@
       else if (r < 0.68 || (!ceil && r < 0.86)) { if ((ok = clear(x, 0, 1, h))) lv.solids.push({ k: 0, x, y: 0, w: 1, h }); }
       else if (r < 0.86) { if ((ok = clear(x, CE - h, 1, h))) lv.solids.push({ k: 0, x, y: CE - h, w: 1, h }); }
       else { const y = 1 + Math.floor(rnd() * 4); if ((ok = clear(x, y, 1, 1))) lv.solids.push({ k: 0, x, y, w: 1, h: 1 }); }
-      x += (ok ? 1.2 : 0.5) + (1 + rnd() * 2.2) / diff.density;
+      x += (ok ? 1.2 : 0.5) + (1 + rnd() * 2.2) / ((density || 1) * diff.density);
     }
   }
 
