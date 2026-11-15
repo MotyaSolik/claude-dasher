@@ -1,1 +1,1 @@
-{"versionCode": 18, "versionName": "1.18", "url": "https://motyasolik.github.io/claude-dasher/apk/claude-dash.apk", "notes": "Level music: Mod API music.set / audio.play / muteBuiltInMusic, pause+resume events, credit line, demo mod and docs"}
+{"versionCode": 19, "versionName": "1.19", "url": "https://motyasolik.github.io/claude-dasher/apk/claude-dash.apk", "notes": "Own level music: pick an audio file from the device (IndexedDB) for any level, start offset, Music screen"}
