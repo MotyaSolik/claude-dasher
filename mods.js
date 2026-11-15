@@ -5,7 +5,7 @@
   'use strict';
   const API_VERSION = 1;
   const EVENTS = ['start', 'attempt', 'frame', 'step', 'jump', 'portal', 'death', 'win', 'menu', 'levelBuilt',
-    'render:world', 'render:hud'];
+    'render:world', 'render:hud', 'pause', 'resume'];
   const PHYS_KEYS = ['G', 'JUMP', 'PAD', 'SHIP_UP', 'SHIP_DN', 'SHIP_MAX', 'CORNER', 'BALL_G', 'BALL_KICK', 'UFO_G', 'UFO_JUMP', 'ROBOT_V', 'ROBOT_BOOST', 'ROBOT_TIME'];
   const MAX_ERRORS = 5;
 
@@ -174,7 +174,16 @@
           particle: (p) => H.particle(p || {}),
           burst: (x, y, n, colors, speed) => H.burst(x, y, num(n, 1, 60, 10), Array.isArray(colors) && colors.length ? colors.map(String) : ['#fff'], num(speed, 0, 20, 6)),
         }),
+        // ---- level music ----
+        music: Object.freeze({
+          // { src, title, artist, volume 0..1, startAt (seconds), loop } for a level id ('l9', 'mod:<modid>:<levelid>', 'custom:<id>')
+          set: (levelId, spec) => H.setMusic(levelId, spec, id),
+          clear: (levelId) => H.clearMusic(levelId, id),
+          list: () => H.listMusic(),
+        }),
         audio: Object.freeze({
+          play: (src, o) => H.playSound(src, o, id),
+          muteBuiltInMusic: (on) => H.muteBuiltIn(!!on, id),
           beep: (f0, f1, dur, type, vol) => H.beep(num(f0, 20, 8000, 440), num(f1, 20, 8000, 440), num(dur, 0.01, 1, 0.1),
             ['sine', 'square', 'sawtooth', 'triangle'].indexOf(type) >= 0 ? type : 'square', num(vol, 0, 0.2, 0.08)),
         }),
