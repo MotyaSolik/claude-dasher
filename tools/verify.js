@@ -18,6 +18,7 @@ for (const def of D.LEVELS) for (const diff of D.DIFFS) {
   }
   (found[def.id] = found[def.id] || {})[diff.id] = seed;
   const modes = def.plan.map((s) => s.m[0]).join('');
+  if (def.seconds) { const L = D.buildLevel(def, diff, seed), sec = L.len / diff.speed; if (Math.abs(sec - def.seconds) > 0.05) { console.log('  DURATION MISMATCH', sec); bad++; } else console.log('  duration', sec.toFixed(2), 's, drop at tile', Math.round(def.drop * diff.speed), '=', def.drop, 's'); }
   console.log(`${def.id} ${diff.name.padEnd(5)} seed=${String(seed).padEnd(4)} [${modes}] ${lv ? 'BEATABLE ~' + secs.toFixed(0) + 's' : 'IMPOSSIBLE'} (${Date.now() - t0} ms)`);
   if (!lv) bad++;
 }

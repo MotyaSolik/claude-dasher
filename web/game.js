@@ -145,6 +145,7 @@
   };
   window.addEventListener('resize', resize); resize();
 
+  const levelSeconds = (def) => def.seconds || def.plan.reduce((a, s) => a + s.len, 0) / 9;
   const rootNote = (def) => (def.hue < 100 ? 49 : def.hue < 250 ? 55 : 58.27);
   // level track (if a mod set one) or the built-in generated music
   function startMusic() {
@@ -155,6 +156,11 @@
       return;
     }
     if (!Music.builtinOff()) Snd.musicStart(rootNote(G.def));
+    const hint = G.def.musicHint;
+    if (hint && G.attempt === 1 && !startMusic.tipped) {
+      startMusic.tipped = true;
+      toast('Совет: для этого уровня подойдёт «' + hint.track + '», оффсет ' + hint.offset + ' с. Меню → ♪ Музыка уровней', 5200);
+    }
   }
   const stopMusic = () => { Snd.musicStop(); Music.stop(); };
   const pauseMusic = () => { Snd.musicStop(); Music.pause(); };
@@ -163,7 +169,7 @@
 
   function startAttempt() {
     G.p = newPlayer(); G.rot = 0; G.ang = 0; G.mc = 0; G.wtrail.length = 0; G.parts.length = 0;
-    G.deadT = 0; G.acc = 0; G.flash = 0; G.cam = -3; G.mode = 'play'; metrics();
+    G.deadT = 0; G.acc = 0; G.flash = 0; G.cam = -3; G.mode = 'play'; G.dropDone = false; G.dropT = 0; metrics();
     startMusic();
     emit('attempt', G.attempt);
   }
@@ -276,7 +282,8 @@
       const modes = [...new Set(def.plan.map((s) => s.m))].map((m) => '<i class="m-' + m + '">' + MODE_NAME[m] + '</i>').join('');
       b.className = 'level';
       b.innerHTML = '<div class="nm">' + def.name + '</div><div class="st">' + '★'.repeat(def.stars) + '☆'.repeat(5 - def.stars) +
-        '</div><div class="modes">' + modes + '</div>' + (mus && mus.title ? '<div class="mus">♪ ' + esc((mus.artist ? mus.artist + ' — ' : '') + mus.title) + '</div>' : '') + '<div class="best">Рекорд: ' + best + '%</div><div class="bar"><i style="width:' + best + '%"></i></div>';
+        ' <small class="dur">⏱ ' + fmtTime(levelSeconds(def)) + '</small></div><div class="modes">' + modes + '</div>' + (mus && mus.title ? '<div class="mus">♪ ' + esc((mus.artist ? mus.artist + ' — ' : '') + mus.title) + '</div>'
+          : def.musicHint ? '<div class="mus hint">♪ Рекомендуем: ' + esc(def.musicHint.track) + ', оффсет ' + def.musicHint.offset + ' с</div>' : '') + '<div class="best">Рекорд: ' + best + '%</div><div class="bar"><i style="width:' + best + '%"></i></div>';
       b.onclick = () => { Snd.init(); startLevel(def); };
       lvls.appendChild(b);
     }
@@ -358,7 +365,7 @@
   function update(dt) {
     for (const q of G.parts) { q.life += dt; q.vy -= 22 * dt; q.x += q.vx * dt; q.y += q.vy * dt; }
     G.parts = G.parts.filter((q) => q.life < q.max);
-    G.shake = Math.max(0, G.shake - dt); G.flash = Math.max(0, G.flash - dt);
+    G.shake = Math.max(0, G.shake - dt); G.flash = Math.max(0, G.flash - dt); G.dropT = Math.max(0, (G.dropT || 0) - dt);
 
     if (G.mode === 'dead') {
       G.deadT += dt; if (G.deadT > 0.85) { G.attempt++; startAttempt(); }
@@ -385,6 +392,11 @@
     if (p.dead) return onDeath();
     if (p.won) return onWin();
     emit('frame', dt);
+    // the DROP of a music level (def.drop seconds after the start): flash, shake and a burst, in time with the track
+    if (!G.dropDone && G.def.drop && p.t >= G.def.drop) {
+      G.dropDone = true; G.dropT = 1.5; G.flash = 0.55; G.shake = 0.45;
+      burst(p.x + 4, p.y + 2, 46, ['#ffffff', MODE_COL[p.mode], '#ffd24a', '#ff4d9a'], 12);
+    }
 
     const sp = G.lv.speed;
     if (p.mode === 'ball') G.rot += (sp * dt / 0.4) * (p.gdir < 0 ? 1 : -1);
@@ -617,6 +629,13 @@
       ctx.fillText(Math.floor(prog * 100) + '%', bx + bw + 8, by + 10);
       ctx.fillStyle = MODE_COL[p.mode]; ctx.font = '800 12px system-ui,sans-serif'; ctx.textAlign = 'right';
       ctx.fillText(MODE_NAME[p.mode].toUpperCase(), bx - 8, by + 10);
+    }
+    if (G.dropT > 0 && (G.mode === 'play' || G.mode === 'dead')) {
+      const a = Math.min(1, G.dropT / 0.6), sc = 1 + (1.5 - G.dropT) * 0.25;
+      ctx.save(); ctx.globalAlpha = a; ctx.translate(W / 2, H * 0.3); ctx.scale(sc, sc);
+      ctx.fillStyle = '#fff'; ctx.strokeStyle = MODE_COL.ship; ctx.lineWidth = 6; ctx.textAlign = 'center';
+      ctx.font = '900 ' + Math.round(Math.min(W / 6, H / 4)) + 'px system-ui,sans-serif';
+      ctx.strokeText('DROP', 0, 0); ctx.fillText('DROP', 0, 0); ctx.restore();
     }
     if (hooked('render:hud')) hookDraw('render:hud');
     if (G.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + G.flash * 1.4 + ')'; ctx.fillRect(0, 0, W, H); }
@@ -1250,7 +1269,7 @@
     for (const c of store.data.custom) out.push({ id: 'custom:' + c.id, name: (c.name || 'Мой уровень') + ' (мой)' });
     return out;
   }
-  function openMusic() { musicOpen = true; hide('menu'); show('musicScreen'); $('musicMsg').textContent = ''; renderMusicScreen(); }
+  function openMusic() { musicOpen = true; $('toast').classList.add('hidden'); hide('menu'); show('musicScreen'); $('musicMsg').textContent = ''; renderMusicScreen(); }
   function closeMusic() { musicOpen = false; hide('musicScreen'); show('menu'); renderMenu(); }
   function musicMsg(t, bad) { const m = $('musicMsg'); m.textContent = t; m.style.color = bad ? '#ff8a9a' : ''; }
   function renderMusicScreen() {
@@ -1263,15 +1282,25 @@
       const d = document.createElement('span');
       d.textContent = mine ? '♪ ' + sp.title + (sp.duration ? ' · ' + fmtTime(sp.duration) : '') : other ? 'Трек от мода «' + sp.modId + '»' : 'Встроенная музыка';
       info.append(t, d);
+      const def = LEVELS.find((x) => x.id === lv.id), hint = def && def.musicHint;
+      if (hint) {
+        const hh = document.createElement('span'); hh.className = 'mhint';
+        hh.textContent = '★ Рекомендуем трек «' + hint.track + '» (' + hint.artist + '): оффсет ' + hint.offset + ' с'; info.appendChild(hh);
+      }
       row.appendChild(info);
       if (mine) {
-        const off = document.createElement('input'); off.type = 'number'; off.min = 0; off.max = 3600; off.step = 1; off.value = Math.round(sp.startAt);
+        const off = document.createElement('input'); off.type = 'number'; off.min = 0; off.max = 3600; off.step = 0.1; off.value = sp.startAt;
         off.title = 'С какой секунды начинать'; off.className = 'moff'; off.setAttribute('aria-label', 'Старт, секунды');
         off.onchange = () => {
           const v = Math.max(0, Math.min(3600, +off.value || 0)); sp.startAt = v;
           MusicDB.run('readwrite', (s) => s.get(lv.id)).then((rec) => rec && MusicDB.put({ ...rec, startAt: v })).catch(() => {});
         };
-        const lab = document.createElement('span'); lab.className = 'mlab'; lab.textContent = 'с, сек'; row.append(lab, off);
+        const lab = document.createElement('span'); lab.className = 'mlab'; lab.textContent = 'оффсет, с'; row.append(lab, off);
+        if (hint && sp.startAt !== hint.offset) {
+          const q = document.createElement('button'); q.className = 'small'; q.textContent = 'Поставить ' + hint.offset;
+          q.onclick = () => { off.value = hint.offset; off.dispatchEvent(new Event('change')); renderMusicScreen(); };
+          row.appendChild(q);
+        }
       }
       const pick = document.createElement('button'); pick.className = 'small go'; pick.textContent = mine ? 'Заменить' : 'Выбрать файл';
       pick.onclick = () => { pickLevel = lv.id; $('musicFile').click(); };
@@ -1298,8 +1327,12 @@
     const finish = (ok, dur) => {
       if (done) return; done = true; clearTimeout(to); probe.src = ''; URL.revokeObjectURL(url);
       if (!ok) return musicMsg('Не удалось прочитать этот файл. Попробуй mp3 или ogg.', true);
-      const rec = { levelId, name: f.name.replace(/\.[^.]+$/, '').slice(0, 60), blob: f, size: f.size, duration: dur, startAt: 0 };
-      MusicDB.put(rec).then(() => { setUserTrack(rec); renderMusicScreen(); musicMsg('Готово: «' + rec.name + '» будет играть на этом уровне'); })
+      const def = LEVELS.find((x) => x.id === levelId), hint = def && def.musicHint;
+      const norm = (t) => String(t).toLowerCase().replace(/[^a-z0-9а-я]+/g, '');
+      const match = !!hint && norm(f.name).indexOf(norm(hint.track)) >= 0;     // the file is the recommended track
+      const rec = { levelId, name: f.name.replace(/\.[^.]+$/, '').slice(0, 60), blob: f, size: f.size, duration: dur, startAt: match ? hint.offset : 0 };
+      MusicDB.put(rec).then(() => { setUserTrack(rec); renderMusicScreen();
+        musicMsg('Готово: «' + rec.name + '» будет играть на этом уровне' + (match ? '. Оффсет ' + hint.offset + ' с поставлен автоматически.' : hint ? '. Для «' + hint.track + '» нужен оффсет ' + hint.offset + ' с (кнопка «Поставить ' + hint.offset + '»).' : '')); })
         .catch(() => musicMsg('Не удалось сохранить файл на устройстве (мало места или запрещено хранилище).', true));
     };
     const to = setTimeout(() => finish(false), 8000);

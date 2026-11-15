@@ -181,3 +181,9 @@ button { font-family: inherit; }
 
 .moff { width: 64px; background: #0c1020; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; font: inherit; font-size: 13px; }
 .mlab { font-size: 11px; color: #9aa6d6; white-space: nowrap; }
+
+.level .dur { font-size: 10px; color: #8791bd; margin-left: 4px; letter-spacing: 0; }
+.level .mus.hint { color: #ffcf7a; }
+.minfo .mhint { color: #ffcf7a; font-size: 11px; }
+.moff { width: 72px; }
+#musicList .mrow { flex-wrap: wrap; } #musicList .minfo { flex: 1 1 200px; }
