@@ -47,11 +47,22 @@
     </div>
 
     <div class="foot">
+      <button id="btnMusic" class="small">♪ Музыка уровней</button>
       <button id="btnMods" class="small">🧩 Моды</button>
       <span id="modButtons" class="cbtns" style="margin:0"></span>
       <button id="btnSound" class="small">🔊 Звук: вкл</button>
       <span class="hint">Тап / пробел / клик — прыжок. Зажми — прыгай подряд.</span>
     </div>
+  </div>
+</section>
+
+<section id="musicScreen" class="screen hidden">
+  <div class="card modcard">
+    <div class="mhead"><h2>Музыка уровней</h2><button id="musicClose" class="small">← Назад</button></div>
+    <p class="warn" style="color:#c8d0f5;background:rgba(120,140,255,.08);border-color:rgba(120,140,255,.3)">Выбери звуковой файл с устройства для любого уровня. Он остаётся только на этом устройстве, в игру и в интернет не загружается. Музыка начинается заново с каждой попыткой, как встроенная.</p>
+    <div id="musicList" class="mlist"></div>
+    <input id="musicFile" type="file" accept="audio/*,.mp3,.ogg,.wav,.m4a,.aac,.flac,.opus" hidden>
+    <div id="musicMsg" class="hint"></div>
   </div>
 </section>
 

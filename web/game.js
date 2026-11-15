@@ -215,6 +215,7 @@
   const JUMPKEY = (e) => e.code === 'Space' || e.code === 'ArrowUp' || e.code === 'KeyW';
   window.addEventListener('keydown', (e) => {
     if (curMenu) { if (e.code === 'Escape') closeMenu(); return; }
+    if (musicOpen) { if (e.code === 'Escape') closeMusic(); return; }
     if (G.mode === 'edit') {
       if (e.target && /INPUT|TEXTAREA/.test(e.target.tagName)) return;
       if (e.code === 'ArrowRight') edPan(4); else if (e.code === 'ArrowLeft') edPan(-4);
@@ -238,6 +239,7 @@
     if (G.mode === 'play' || G.mode === 'dead') { pause(); return true; }
     if (G.mode === 'pause' || G.mode === 'win') { leave(); return true; }
     if (curMenu) { closeMenu(); return true; }
+    if (musicOpen) { closeMusic(); return true; }
     if (modsOpen) { closeMods(); return true; }
     if (G.mode === 'edit') { if (!$('edCodePanel').classList.contains('hidden')) hide('edCodePanel'); else edExit(); return true; }
     return false;
@@ -939,6 +941,7 @@
       if (!spec || typeof spec !== 'object') throw new Error('music.set: нужен объект { src, title, artist, ... }');
       if (typeof spec.src !== 'string' || !AUDIO_OK.test(spec.src)) throw new Error('music.set: src — data:audio/...;base64,..., https://... или audio/файл');
       const old = Music.map.get(levelId);
+      if (old && old.user) { console.warn('[mod ' + modId + '] уровень «' + levelId + '» уже имеет трек игрока, музыка мода не применена'); return; }
       if (old && old.modId !== modId) throw new Error('у уровня «' + levelId + '» уже есть музыка от мода «' + old.modId + '»');
       if (old && Music.cur === old) Music.stop();
       const txt = (v) => (v === undefined || v === null ? '' : String(v).slice(0, 60));
@@ -1196,6 +1199,113 @@
       .catch(() => { clearTimeout(to); setMsg('Не удалось скачать: ссылка недоступна или сайт не разрешает загрузку из игры. Открой ссылку, скопируй код и вставь его в поле выше.', true); });
   };
 
+
+  // ======================================================================
+  // Own music: pick an audio file from the device for any level.
+  // The file never leaves the device (IndexedDB) and is not part of the game or the repository.
+  // ======================================================================
+  let musicOpen = false, pickLevel = null;
+  const MusicDB = {
+    db: null,
+    open() {
+      return new Promise((resolve, reject) => {
+        if (this.db) return resolve(this.db);
+        if (!window.indexedDB) return reject(new Error('в этом браузере нет хранилища для файлов'));
+        const r = indexedDB.open('claudedash-music', 1);
+        r.onupgradeneeded = () => r.result.createObjectStore('tracks', { keyPath: 'levelId' });
+        r.onsuccess = () => { this.db = r.result; resolve(this.db); };
+        r.onerror = () => reject(r.error || new Error('не удалось открыть хранилище'));
+      });
+    },
+    run(mode, fn) {
+      return this.open().then((db) => new Promise((resolve, reject) => {
+        const tx = db.transaction('tracks', mode), st = tx.objectStore('tracks'), req = fn(st);
+        tx.oncomplete = () => resolve(req && req.result);
+        tx.onerror = tx.onabort = () => reject(tx.error || new Error('ошибка хранилища'));
+      }));
+    },
+    all() { return this.run('readonly', (s) => s.getAll()); },
+    put(rec) { return this.run('readwrite', (s) => s.put(rec)); },
+    del(id) { return this.run('readwrite', (s) => s.delete(id)); },
+  };
+  const fmtTime = (s) => (isFinite(s) && s > 0 ? Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0') : '');
+  function setUserTrack(rec) {
+    const old = Music.map.get(rec.levelId);
+    if (old) { if (Music.cur === old) Music.stop(); if (old.url) URL.revokeObjectURL(old.url); }
+    const url = URL.createObjectURL(rec.blob);
+    Music.map.set(rec.levelId, { src: url, url, title: rec.name, artist: '', modId: '_user', user: true, duration: rec.duration || 0,
+      volume: 0.9, startAt: rec.startAt || 0, loop: false, audio: null });
+  }
+  function dropUserTrack(levelId) {
+    const s = Music.map.get(levelId);
+    if (s && s.user) { if (Music.cur === s) Music.stop(); if (s.url) URL.revokeObjectURL(s.url); Music.map.delete(levelId); }
+  }
+  function loadUserTracks() {
+    MusicDB.all().then((list) => { for (const rec of list || []) setUserTrack(rec); if (G.mode === 'menu') renderMenu(); if (musicOpen) renderMusicScreen(); }).catch(() => { /* no storage: feature stays off */ });
+  }
+
+  function allLevelsForMusic() {
+    const out = LEVELS.map((d) => ({ id: d.id, name: d.name }));
+    for (const m of G.modLevels) out.push({ id: m.id, name: (m.kind === 'gen' ? m.def.name : m.data.name) + ' (мод)' });
+    for (const c of store.data.custom) out.push({ id: 'custom:' + c.id, name: (c.name || 'Мой уровень') + ' (мой)' });
+    return out;
+  }
+  function openMusic() { musicOpen = true; hide('menu'); show('musicScreen'); $('musicMsg').textContent = ''; renderMusicScreen(); }
+  function closeMusic() { musicOpen = false; hide('musicScreen'); show('menu'); renderMenu(); }
+  function musicMsg(t, bad) { const m = $('musicMsg'); m.textContent = t; m.style.color = bad ? '#ff8a9a' : ''; }
+  function renderMusicScreen() {
+    const list = $('musicList'); list.innerHTML = '';
+    for (const lv of allLevelsForMusic()) {
+      const sp = Music.map.get(lv.id), mine = sp && sp.user, other = sp && !sp.user;
+      const row = document.createElement('div'); row.className = 'mrow';
+      const info = document.createElement('div'); info.className = 'minfo';
+      const t = document.createElement('b'); t.textContent = lv.name;
+      const d = document.createElement('span');
+      d.textContent = mine ? '♪ ' + sp.title + (sp.duration ? ' · ' + fmtTime(sp.duration) : '') : other ? 'Трек от мода «' + sp.modId + '»' : 'Встроенная музыка';
+      info.append(t, d);
+      row.appendChild(info);
+      if (mine) {
+        const off = document.createElement('input'); off.type = 'number'; off.min = 0; off.max = 3600; off.step = 1; off.value = Math.round(sp.startAt);
+        off.title = 'С какой секунды начинать'; off.className = 'moff'; off.setAttribute('aria-label', 'Старт, секунды');
+        off.onchange = () => {
+          const v = Math.max(0, Math.min(3600, +off.value || 0)); sp.startAt = v;
+          MusicDB.run('readwrite', (s) => s.get(lv.id)).then((rec) => rec && MusicDB.put({ ...rec, startAt: v })).catch(() => {});
+        };
+        const lab = document.createElement('span'); lab.className = 'mlab'; lab.textContent = 'с, сек'; row.append(lab, off);
+      }
+      const pick = document.createElement('button'); pick.className = 'small go'; pick.textContent = mine ? 'Заменить' : 'Выбрать файл';
+      pick.onclick = () => { pickLevel = lv.id; $('musicFile').click(); };
+      row.appendChild(pick);
+      if (mine) {
+        const del = document.createElement('button'); del.className = 'small del'; del.textContent = '🗑';
+        del.onclick = () => MusicDB.del(lv.id).then(() => { dropUserTrack(lv.id); renderMusicScreen(); musicMsg('Трек убран, играет встроенная музыка'); }).catch(() => musicMsg('Не удалось удалить', true));
+        row.appendChild(del);
+      }
+      list.appendChild(row);
+    }
+  }
+  $('btnMusic').onclick = openMusic;
+  $('musicClose').onclick = closeMusic;
+  $('musicFile').onchange = (e) => {
+    const f = e.target.files && e.target.files[0]; e.target.value = '';
+    const levelId = pickLevel; if (!f || !levelId) return;
+    const okType = /^audio\//.test(f.type) || /\.(mp3|ogg|oga|wav|m4a|aac|flac|opus|webm)$/i.test(f.name);
+    if (!okType) return musicMsg('Это не звуковой файл. Подойдут mp3, ogg, wav, m4a, aac, flac.', true);
+    if (f.size > 40 * 1024 * 1024) return musicMsg('Файл слишком большой (максимум 40 МБ).', true);
+    musicMsg('Проверяю файл…');
+    // make sure the browser can actually play it, and read the length
+    const url = URL.createObjectURL(f), probe = new Audio(); let done = false;
+    const finish = (ok, dur) => {
+      if (done) return; done = true; clearTimeout(to); probe.src = ''; URL.revokeObjectURL(url);
+      if (!ok) return musicMsg('Не удалось прочитать этот файл. Попробуй mp3 или ogg.', true);
+      const rec = { levelId, name: f.name.replace(/\.[^.]+$/, '').slice(0, 60), blob: f, size: f.size, duration: dur, startAt: 0 };
+      MusicDB.put(rec).then(() => { setUserTrack(rec); renderMusicScreen(); musicMsg('Готово: «' + rec.name + '» будет играть на этом уровне'); })
+        .catch(() => musicMsg('Не удалось сохранить файл на устройстве (мало места или запрещено хранилище).', true));
+    };
+    const to = setTimeout(() => finish(false), 8000);
+    probe.preload = 'metadata'; probe.onloadedmetadata = () => finish(true, probe.duration); probe.onerror = () => finish(false); probe.src = url;
+  };
+
   // ---------- main loop ----------
   function frame(now) {
     const dt = Math.min(0.05, (now - (G.last || now)) / 1000); G.last = now; menuT += dt;
@@ -1211,5 +1321,6 @@
   requestAnimationFrame(frame);
   window.__mods = { host, reload: reloadMods, install: installSource };
   window.__music = Music; window.__snd = Snd;
+  loadUserTracks();
   window.__game = G; // handy for debugging / tests
 })();

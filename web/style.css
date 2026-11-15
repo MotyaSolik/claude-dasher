@@ -178,3 +178,6 @@ button { font-family: inherit; }
 .unlock .uinfo { flex: 1; min-width: 0; display: flex; flex-direction: column; } .unlock .uinfo b { font-size: 13px; color: #5ee08a; } .unlock .uinfo span { font-size: 12px; color: #c8d0f5; }
 
 .level .mus { font-size: 10px; color: #c77dff; margin: 1px 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.moff { width: 64px; background: #0c1020; color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; font: inherit; font-size: 13px; }
+.mlab { font-size: 11px; color: #9aa6d6; white-space: nowrap; }
