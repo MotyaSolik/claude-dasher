@@ -122,16 +122,16 @@
     },
     {
       // the hardest level; finishing it on SWIN unlocks the A6 skin.
-      // Built for music: it lasts exactly 70 s (1:10) on every difficulty and the DROP starts at 20 s:
-      // a calm intro (20 s of easy cube), then the dense multi-mode part (50 s).
+      // Built for music: it lasts exactly 70 s (1:10) on every difficulty and the DROP starts at 26 s:
+      // a calm intro (26 s of easy cube), then the dense multi-mode part (44 s).
       id: 'l9', name: 'Thinking Space II', stars: 5, seed: 51, hue: 255,
-      seconds: 70, drop: 20, clearTime: 0.9,
+      seconds: 70, drop: 26, clearTime: 0.9,
       musicHint: { track: 'Nuke Powder', artist: 'MaelouX', offset: 117 },
       plan: [
-        { m: 'cube', len: 180, gap: [6, 9], pool: ['spike1', 'spike2', 'block1', 'block3', 'pit2', 'stairs', 'blockSpike'] },   // 0:00 - 0:20 intro
-        { m: 'ship', len: 60, density: 1.7 }, { m: 'ball', len: 55, density: 1.7 }, { m: 'cube', len: 25 }, { m: 'wave', len: 55, density: 1.7 },
-        { m: 'ufo', len: 50, density: 1.7 }, { m: 'robot', len: 45, density: 1.7 }, { m: 'cube', len: 20 }, { m: 'spider', len: 50, density: 1.7 },
-        { m: 'wave', len: 40, density: 1.7 }, { m: 'cube', len: 50 },
+        { m: 'cube', len: 234, gap: [6, 9], pool: ['spike1', 'spike2', 'block1', 'block3', 'pit2', 'stairs', 'blockSpike'] },   // 0:00 - 0:26 intro
+        { m: 'ship', len: 55, density: 1.7 }, { m: 'ball', len: 50, density: 1.7 }, { m: 'cube', len: 25 }, { m: 'wave', len: 50, density: 1.7 },
+        { m: 'ufo', len: 45, density: 1.7 }, { m: 'robot', len: 40, density: 1.7 }, { m: 'cube', len: 20 }, { m: 'spider', len: 45, density: 1.7 },
+        { m: 'wave', len: 30, density: 1.7 }, { m: 'cube', len: 36 },
       ],
       gap: [3.2, 5.5], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'pitSpike', 'padSpikes', 'padBlock', 'spikeTrain', 'stairs'],
     },
