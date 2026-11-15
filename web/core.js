@@ -122,17 +122,15 @@
     },
     {
       // the hardest level; finishing it on SWIN unlocks the A6 skin.
-      // Built for music: it lasts exactly 135 s (2:15) on every difficulty and the DROP starts at 25 s:
-      // a calm intro (25 s of easy cube) and then the dense multi-mode part.
+      // Built for music: it lasts exactly 70 s (1:10) on every difficulty and the DROP starts at 30 s:
+      // a calm intro (30 s of easy cube), then the dense multi-mode part (40 s).
       id: 'l9', name: 'Thinking Space II', stars: 5, seed: 51, hue: 255,
-      seconds: 135, drop: 25,
+      seconds: 70, drop: 30, clearTime: 0.9,
       musicHint: { track: 'Nuke Powder', artist: 'MaelouX', offset: 117 },
       plan: [
-        { m: 'cube', len: 225, gap: [6, 9], pool: ['spike1', 'spike2', 'block1', 'block3', 'pit2', 'stairs', 'blockSpike'] },   // 0:00 - 0:25 intro
-        { m: 'ship', len: 70 }, { m: 'ball', len: 70 }, { m: 'cube', len: 40 }, { m: 'wave', len: 80 }, { m: 'ufo', len: 70 },
-        { m: 'robot', len: 70 }, { m: 'cube', len: 40 }, { m: 'spider', len: 70 }, { m: 'wave', len: 70 }, { m: 'cube', len: 40 },
-        { m: 'ship', len: 70 }, { m: 'ball', len: 60 }, { m: 'cube', len: 30 }, { m: 'ufo', len: 60 }, { m: 'robot', len: 50 },
-        { m: 'spider', len: 60 }, { m: 'cube', len: 40 },
+        { m: 'cube', len: 270, gap: [6, 9], pool: ['spike1', 'spike2', 'block1', 'block3', 'pit2', 'stairs', 'blockSpike'] },   // 0:00 - 0:30 intro
+        { m: 'ship', len: 55, density: 1.7 }, { m: 'ball', len: 50, density: 1.7 }, { m: 'cube', len: 25 }, { m: 'wave', len: 50, density: 1.7 },
+        { m: 'ufo', len: 45, density: 1.7 }, { m: 'robot', len: 40, density: 1.7 }, { m: 'cube', len: 20 }, { m: 'spider', len: 45, density: 1.7 }, { m: 'cube', len: 30 },
       ],
       gap: [3.2, 5.5], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'pitSpike', 'padSpikes', 'padBlock', 'spikeTrain', 'stairs'],
     },
@@ -243,8 +241,9 @@
       }
       return true;
     };
-    let x = x0 + 10;
-    while (x < x1 - 10) {
+    const clr = lv.def.clearTime ? lv.def.clearTime * diff.speed : 10;   // free run-in / run-out at both ends of the section
+    let x = x0 + clr;
+    while (x < x1 - clr) {
       const r = rnd(), h = 1 + Math.floor(rnd() * 3);
       let ok = false;
       if (r < 0.25 || (!ceil && r < 0.5)) { if ((ok = clear(x, 0, 1, 1))) lv.spikes.push({ k: 1, x, y: 0, d: 0 }); }
