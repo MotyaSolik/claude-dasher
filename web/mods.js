@@ -5,7 +5,7 @@
   'use strict';
   const API_VERSION = 1;
   const EVENTS = ['start', 'attempt', 'frame', 'step', 'jump', 'portal', 'death', 'win', 'menu', 'levelBuilt',
-    'render:world', 'render:hud', 'pause', 'resume'];
+    'render:world', 'render:hud', 'pause', 'resume', 'speed'];
   const PHYS_KEYS = ['G', 'JUMP', 'PAD', 'SHIP_UP', 'SHIP_DN', 'SHIP_MAX', 'CORNER', 'BALL_G', 'BALL_KICK', 'UFO_G', 'UFO_JUMP', 'ROBOT_V', 'ROBOT_BOOST', 'ROBOT_TIME'];
   const MAX_ERRORS = 5;
 

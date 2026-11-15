@@ -1,17 +1,23 @@
 /* Claude Dash — rendering, input, audio, menus, level editor. */
 (function () {
   'use strict';
-  const { C, LEVELS, DIFFS, buildLevel, buildCustom, newPlayer, step } = DashCore;
+  const { C, LEVELS, SPEEDS, buildLevel, buildCustom, newPlayer, step } = DashCore;
   const $ = (id) => document.getElementById(id);
   const canvas = $('c'), ctx = canvas.getContext('2d');
 
   // ---------- storage (safe) ----------
   const store = {
-    data: { char: 'claude', diff: 'hard', best: {}, sound: true, custom: [], unlocked: [] },
+    data: { char: 'claude', best: {}, sound: true, custom: [], unlocked: [] },
     load() { try { Object.assign(this.data, JSON.parse(localStorage.getItem('claudedash') || '{}')); } catch (e) {} },
     save() { try { localStorage.setItem('claudedash', JSON.stringify(this.data)); } catch (e) {} },
   };
   store.load();
+  // difficulties are gone: merge old per-difficulty records ("l1:hard") into one record per level
+  for (const k of Object.keys(store.data.best || {})) {
+    const m = k.match(/^(.*):(easy|hard|swin)$/);
+    if (m) { store.data.best[m[1]] = Math.max(store.data.best[m[1]] || 0, store.data.best[k]); delete store.data.best[k]; }
+  }
+  delete store.data.diff;
   if (!Array.isArray(store.data.custom)) store.data.custom = [];
   if (!Array.isArray(store.data.unlocked)) store.data.unlocked = [];
 
@@ -21,7 +27,7 @@
     { id: 'pig', name: 'Хрюша', src: 'img/pig.png', colors: ['#e2b9a0', '#f1c9b4', '#c98f86'] },
     // locked until the level is finished on that difficulty (see grantUnlocks)
     { id: 'a6', name: 'A6', src: 'img/a6.png', colors: ['#cdbcab', '#e9dfd2', '#ffffff'],
-      unlock: { level: 'l9', diff: 'swin', text: 'Пройди «Thinking Space II» на SWIN' } },
+      unlock: { level: 'l9', text: 'Пройди «Thinking Space II»' } },
   ];
   for (const ch of CHARS) { ch.img = new Image(); ch.img.src = ch.src; }
   const isUnlocked = (ch) => !ch.unlock || store.data.unlocked.indexOf(ch.id) >= 0;
@@ -62,6 +68,7 @@
     },
     jump() { if (!this.on()) return; const t = this.ctx.currentTime; this.osc('square', 300, 640, t, 0.09, 0.06); },
     pad() { if (!this.on()) return; const t = this.ctx.currentTime; this.osc('triangle', 400, 1200, t, 0.18, 0.12); },
+    speedUp(n) { if (!this.on()) return; const t = this.ctx.currentTime; this.osc('sawtooth', 180 * n, 700 * n, t, 0.28, 0.1); this.osc('square', 360 * n, 1400 * n, t + 0.04, 0.2, 0.04); },
     portal() { if (!this.on()) return; const t = this.ctx.currentTime; this.osc('sine', 200, 1400, t, 0.3, 0.14); this.osc('triangle', 1400, 300, t + 0.05, 0.25, 0.07); },
     die() { if (!this.on()) return; const t = this.ctx.currentTime; this.noise(t, 0.32, 0.5, 300); this.osc('sawtooth', 220, 40, t, 0.35, 0.18); },
     win() { if (!this.on()) return; const t = this.ctx.currentTime;[523, 659, 784, 1047].forEach((f, i) => this.osc('square', f, f, t + i * 0.1, 0.25, 0.08)); },
@@ -139,7 +146,7 @@
   // ---------- game state ----------
   const G = {
     mode: 'menu',       // menu | play | dead | pause | win | edit
-    def: null, diff: DIFFS.find((d) => d.id === store.data.diff) || DIFFS[1], lv: null, p: null, hero: heroById(store.data.char),
+    def: null, lv: null, p: null, hero: heroById(store.data.char),
     attempt: 1, held: false, acc: 0, last: 0, cam: 0, deadT: 0, shake: 0, testing: false, editing: null,
     rot: 0, ang: 0, parts: [], trailT: 0, bestRun: 0, flash: 0, winT: 0, mc: 0, wtrail: [],
   };
@@ -165,10 +172,10 @@
   const stopMusic = () => { Snd.musicStop(); Music.stop(); };
   const pauseMusic = () => { Snd.musicStop(); Music.pause(); };
   const resumeMusic = () => { if (!Music.resume()) startMusic(); };
-  const bestKey = (def) => def.id + ':' + G.diff.id;
+  const bestKey = (def) => def.id;
 
   function startAttempt() {
-    G.p = newPlayer(); G.rot = 0; G.ang = 0; G.mc = 0; G.wtrail.length = 0; G.parts.length = 0;
+    G.p = newPlayer(); G.rot = 0; G.ang = 0; G.mc = 0; G.sc = 0; G.spdPop = null; G.wtrail.length = 0; G.parts.length = 0;
     G.deadT = 0; G.acc = 0; G.flash = 0; G.cam = -3; G.mode = 'play'; G.dropDone = false; G.dropT = 0; metrics();
     startMusic();
     emit('attempt', G.attempt);
@@ -178,10 +185,10 @@
     hide('menu'); hide('editor'); hide('pause'); hide('win'); show('btnPause');
     emit('start', hostState()); startAttempt();
   }
-  function startLevel(def) { G.def = def; G.lv = buildLevel(def, G.diff); G.testing = false; emit('levelBuilt', G.lv); begin(); }
+  function startLevel(def) { G.def = def; G.lv = buildLevel(def); G.testing = false; emit('levelBuilt', G.lv); begin(); }
   function startCustom(data, testing) {
     G.def = { id: 'custom:' + data.id, name: data.name || 'Мой уровень', hue: data.hue || 200, custom: true };
-    G.lv = buildCustom(data, G.diff); G.testing = !!testing; emit('levelBuilt', G.lv); begin();
+    G.lv = buildCustom(data); G.testing = !!testing; emit('levelBuilt', G.lv); begin();
   }
   function leave() { if (G.testing) { const d = G.editing; G.testing = false; openEditor(d); } else toMenu(); }
   function toMenu() {
@@ -268,14 +275,6 @@
       };
       chars.appendChild(b);
     }
-    const diffs = $('diffs'); diffs.innerHTML = '';
-    for (const d of DIFFS) {
-      const b = document.createElement('button');
-      b.className = 'diff d-' + d.id + (d.id === G.diff.id ? ' sel' : '');
-      b.innerHTML = '<b>' + d.name + '</b><span>' + ({ easy: 'спокойно', hard: 'быстро', swin: 'хрю-ад' })[d.id] + '</span>';
-      b.onclick = () => { G.diff = d; store.data.diff = d.id; store.save(); renderMenu(); };
-      diffs.appendChild(b);
-    }
     const lvls = $('levels'); lvls.innerHTML = '';
     for (const def of LEVELS) {
       const best = store.data.best[bestKey(def)] || 0, mus = Music.spec(def), b = document.createElement('button');
@@ -337,7 +336,7 @@
     if (G.testing || !G.def || G.def.custom) return out;
     for (const ch of CHARS) {
       const u = ch.unlock;
-      if (!u || isUnlocked(ch) || G.def.id !== u.level || G.diff.id !== u.diff) continue;
+      if (!u || isUnlocked(ch) || G.def.id !== u.level) continue;
       if (window.DashMods && DashMods.loaded.length) { toast('Моды включены: скин не открывается. Выключи моды или запусти безопасный режим'); continue; }
       store.data.unlocked.push(ch.id); out.push(ch);
     }
@@ -348,7 +347,7 @@
     G.mode = 'win'; stopMusic(); Snd.win(); emit('win', { attempt: G.attempt });
     if (!G.testing) { store.data.best[bestKey(G.def)] = 100; store.save(); }
     burst(G.p.x + 1, G.p.y + 1, 50, ['#ffd24a', '#ff7a45', '#5ad1ff', '#9dff8a'], 10);
-    $('winStats').textContent = G.def.name + ' · ' + G.diff.name + ' — попыток: ' + G.attempt;
+    $('winStats').textContent = G.def.name + ' — попыток: ' + G.attempt;
     $('winImg').src = G.hero.src; G.winT = 0;
     const fresh = grantUnlocks(), ub = $('winUnlock');
     ub.classList.toggle('hidden', !fresh.length);
@@ -384,6 +383,11 @@
       if ((p.padHit || 0) !== pads) { Snd.pad(); burst(p.x + 0.45, p.y, 8, ['#ffe066', '#fff'], 4); }
       G.acc -= C.DT;
     }
+    if (p.speedChanged !== G.sc) {
+      G.sc = p.speedChanged; Snd.speedUp(p.si); G.spdPop = { n: p.si, t: 1.1 }; G.flash = Math.max(G.flash, 0.12);
+      burst(p.x + p.sz / 2, p.y + p.sz / 2, 16, [SPEEDS[p.si].color, '#fff'], 8);
+      emit('speed', p.si);
+    }
     if (p.modeChanged !== G.mc) {
       G.mc = p.modeChanged; Snd.portal(); G.rot = 0; G.wtrail.length = 0;
       burst(p.x + p.sz / 2, p.y + p.sz / 2, 14, [MODE_COL[p.mode], '#fff'], 6);
@@ -398,7 +402,7 @@
       burst(p.x + 4, p.y + 2, 46, ['#ffffff', MODE_COL[p.mode], '#ffd24a', '#ff4d9a'], 12);
     }
 
-    const sp = G.lv.speed;
+    const sp = G.lv.speed * p.sf;
     if (p.mode === 'ball') G.rot += (sp * dt / 0.4) * (p.gdir < 0 ? 1 : -1);
     else if (p.mode === 'cube') {
       if (!p.grounded) G.rot += 14.1 * dt;
@@ -484,7 +488,7 @@
         }
       }
     }
-    for (const po of lv.portals) drawPortal(po);
+    for (const po of lv.portals) { if (po.speed) drawSpeedPortal(po, lv); else drawPortal(po); }
     // finish line
     const fx = sx(lv.len);
     if (fx < W + 50) {
@@ -513,6 +517,26 @@
     ctx.globalAlpha = 1; ctx.lineWidth = 5; ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '800 ' + Math.max(10, TILE * 0.3) + 'px system-ui,sans-serif';
     ctx.fillText(MODE_NAME[po.mode].toUpperCase(), x, sy(0.45) - TILE * 0.2);
+    ctx.restore();
+  }
+
+  // speed portal: a slim gate with n chevrons in the colour of the speed (1 blue, 2 green, 3 pink, 4 red)
+  function drawSpeedPortal(po, lv) {
+    // when a mode portal stands in the same place, draw this one a little to the right
+    const twin = lv.portals.some((q) => q !== po && q.mode && Math.abs(q.x - po.x) < 0.01);
+    const x = sx(po.x) + (twin ? TILE * 0.9 : 0); if (x < -60 || x > W + 60) return;
+    const top = sy(C.CEIL), bot = sy(0), sp = SPEEDS[po.speed], cy = (top + bot) / 2, ry = (bot - top) / 2;
+    ctx.save(); ctx.strokeStyle = sp.color; ctx.fillStyle = sp.color;
+    ctx.globalAlpha = 0.14; ctx.beginPath(); ctx.ellipse(x, cy, TILE * 0.32, ry, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x, cy, TILE * 0.2, ry, 0, 0, Math.PI * 2);
+    ctx.globalAlpha = 0.22; ctx.lineWidth = 12; ctx.stroke(); ctx.globalAlpha = 1; ctx.lineWidth = 4; ctx.stroke();
+    ctx.lineWidth = Math.max(3, TILE * 0.09); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    for (let k = 0; k < po.speed; k++) {
+      const ox = x - TILE * 0.06 * (po.speed - 1) + k * TILE * 0.12 * 1.0 - TILE * 0.06;
+      ctx.beginPath(); ctx.moveTo(ox - TILE * 0.07, cy - TILE * 0.32); ctx.lineTo(ox + TILE * 0.07, cy); ctx.lineTo(ox - TILE * 0.07, cy + TILE * 0.32); ctx.stroke();
+    }
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = '800 ' + Math.max(10, TILE * 0.3) + 'px system-ui,sans-serif';
+    ctx.fillText(sp.name, x, twin ? sy(1.5) : sy(0.45) - TILE * 0.2);
     ctx.restore();
   }
 
@@ -608,8 +632,6 @@
     // attempt text (world space)
     ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 ' + (TILE * 0.8) + 'px system-ui,sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('Попытка ' + G.attempt, sx(6), sy(4.5));
-    ctx.font = '700 ' + (TILE * 0.4) + 'px system-ui,sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.6)';
-    ctx.fillText(G.diff.name, sx(6), sy(4.5) + TILE * 0.55);
     // particles
     for (const q of G.parts) {
       ctx.globalAlpha = Math.max(0, 1 - q.life / q.max); ctx.fillStyle = q.c;
@@ -627,7 +649,9 @@
       ctx.strokeStyle = 'rgba(255,255,255,.6)'; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, 10);
       ctx.fillStyle = '#fff'; ctx.font = '800 14px system-ui,sans-serif'; ctx.textAlign = 'left';
       ctx.fillText(Math.floor(prog * 100) + '%', bx + bw + 8, by + 10);
-      ctx.fillStyle = MODE_COL[p.mode]; ctx.font = '800 12px system-ui,sans-serif'; ctx.textAlign = 'right';
+      const sp0 = SPEEDS[p.si]; ctx.font = '800 12px system-ui,sans-serif'; ctx.textAlign = 'right';
+      ctx.fillStyle = sp0.color; ctx.fillText(sp0.name, bx - 8, by + 26);
+      ctx.fillStyle = MODE_COL[p.mode];
       ctx.fillText(MODE_NAME[p.mode].toUpperCase(), bx - 8, by + 10);
     }
     if (G.dropT > 0 && (G.mode === 'play' || G.mode === 'dead')) {
@@ -636,6 +660,14 @@
       ctx.fillStyle = '#fff'; ctx.strokeStyle = MODE_COL.ship; ctx.lineWidth = 6; ctx.textAlign = 'center';
       ctx.font = '900 ' + Math.round(Math.min(W / 6, H / 4)) + 'px system-ui,sans-serif';
       ctx.strokeText('DROP', 0, 0); ctx.fillText('DROP', 0, 0); ctx.restore();
+    }
+    if (G.spdPop && G.mode === 'play') {   // "2x" pops up when a speed portal is passed
+      const sp1 = G.spdPop; sp1.t -= 0.016;
+      if (sp1.t <= 0) G.spdPop = null; else {
+        ctx.save(); ctx.globalAlpha = Math.min(1, sp1.t / 0.5); ctx.textAlign = 'center'; ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(0,0,0,.55)';
+        ctx.fillStyle = SPEEDS[sp1.n].color; ctx.font = '900 ' + Math.round(Math.min(W / 9, H / 6)) + 'px system-ui,sans-serif';
+        ctx.strokeText(SPEEDS[sp1.n].name, W / 2, H * 0.42); ctx.fillText(SPEEDS[sp1.n].name, W / 2, H * 0.42); ctx.restore();
+      }
     }
     if (hooked('render:hud')) hookDraw('render:hud');
     if (G.flash > 0) { ctx.fillStyle = 'rgba(255,255,255,' + G.flash * 1.4 + ')'; ctx.fillRect(0, 0, W, H); }
@@ -673,10 +705,11 @@
   const TOOLS = [
     ['b', '■', 'Блок'], ['s', '▲', 'Шип'], ['sd', '▼', 'Шип вниз'], ['p', '▬', 'Батут'],
     ['gc', '◼', 'Куб'], ['gs', '▶', 'Корабль'], ['gw', '≈', 'Волна'], ['gb', '●', 'Шар'], ['gu', '◓', 'НЛО'], ['gr', '▣', 'Робот'], ['gp', '✱', 'Паук'],
+    ['v1', '›', '1x'], ['v2', '››', '2x'], ['v3', '›››', '3x'], ['v4', '››››', '4x'],
     ['h', '∪', 'Яма'], ['e', '⌫', 'Ластик'], ['hand', '✋', 'Двигать'],
   ];
   const PORTAL_TOOL = { gc: 'cube', gs: 'ship', gw: 'wave', gb: 'ball', gu: 'ufo', gr: 'robot', gp: 'spider' };
-  const cellKey = (o) => (o.t === 'h' ? 'h' + o.x : o.t === 'g' ? 'g' + o.x : o.x + ',' + o.y);
+  const cellKey = (o) => (o.t === 'h' ? 'h' + o.x : o.t === 'g' ? 'g' + o.x : o.t === 'v' ? 'v' + o.x : o.x + ',' + o.y);
 
   function buildToolbar() {
     const bar = $('edTools'); bar.innerHTML = '';
@@ -684,16 +717,16 @@
       const b = document.createElement('button');
       b.className = 'tool' + (id === ED.tool ? ' sel' : '') + (id[0] === 'g' ? ' t-' + PORTAL_TOOL[id] : '');
       b.innerHTML = '<b>' + glyph + '</b><span>' + name + '</span>'; b.dataset.tool = id;
+      if (id[0] === 'v') b.firstChild.style.color = SPEEDS[+id[1]].color;
       b.onclick = () => { ED.tool = id; for (const x of bar.children) x.classList.toggle('sel', x.dataset.tool === id); };
       bar.appendChild(b);
     }
   }
   function rebuildEd() {
     ED.data.objs = [...ED.cells.values()];
-    ED.lv = buildCustom(ED.data, G.diff);
+    ED.lv = buildCustom(ED.data);
     const sc = $('edScroll'); sc.max = Math.max(0, ED.data.len - Math.floor(W / TILE) + 4);
     $('edInfo').textContent = ED.data.len + ' клеток';
-    $('edDiff').textContent = 'Тест: ' + G.diff.name;
   }
   function openEditor(entry, opts) {
     const d = entry ? JSON.parse(JSON.stringify(entry)) : { id: 'u' + Date.now().toString(36), name: 'Мой уровень', len: 120, objs: [] };
@@ -722,19 +755,20 @@
   function edApply(c, first) {
     const t = ED.tool, d = ED.data;
     if (c.x < 0 || c.x >= d.len) return;
-    const key = t === 'e' ? 'e' + c.x + ',' + c.y : t + ':' + c.x + ',' + (t === 'h' || t[0] === 'g' ? 0 : c.y);
+    const key = t === 'e' ? 'e' + c.x + ',' + c.y : t + ':' + c.x + ',' + (t === 'h' || t[0] === 'g' || t[0] === 'v' ? 0 : c.y);
     if (ED.last === key) return; ED.last = key;
     const erase = () => {
       const k = c.x + ',' + c.y;
       if (ED.cells.has(k)) ED.cells.delete(k);
       else if (c.y < 0 && ED.cells.has('h' + c.x)) ED.cells.delete('h' + c.x);
       else if (ED.cells.has('g' + c.x)) ED.cells.delete('g' + c.x);
+      else if (ED.cells.has('v' + c.x)) ED.cells.delete('v' + c.x);
     };
     if (t === 'e') erase();
-    else if (t === 'h' || t[0] === 'g') {
-      const o = t === 'h' ? { t: 'h', x: c.x } : { t: 'g', x: c.x, m: PORTAL_TOOL[t] };
+    else if (t === 'h' || t[0] === 'g' || t[0] === 'v') {
+      const o = t === 'h' ? { t: 'h', x: c.x } : t[0] === 'v' ? { t: 'v', x: c.x, n: +t[1] } : { t: 'g', x: c.x, m: PORTAL_TOOL[t] };
       const k = cellKey(o), ex = ED.cells.get(k);
-      if (first) ED.mode = ex && ex.m === o.m ? 'del' : 'add';
+      if (first) ED.mode = ex && ex.m === o.m && ex.n === o.n ? 'del' : 'add';
       if (ED.mode === 'del') ED.cells.delete(k); else ED.cells.set(k, o);
     } else {
       if (c.y < 0 || c.y > 6) return;
@@ -791,9 +825,6 @@
   $('edBack').onclick = edExit;
   $('edSave').onclick = () => { saveEditor(); const b = $('edSave'); b.textContent = '✓ Сохранено'; setTimeout(() => { b.textContent = '💾 Сохранить'; }, 1200); };
   $('edTest').onclick = () => { const d = saveEditor(); Snd.init(); startCustom(d, true); };
-  $('edDiff').onclick = () => {
-    G.diff = DIFFS[(DIFFS.indexOf(G.diff) + 1) % DIFFS.length]; store.data.diff = G.diff.id; store.save(); rebuildEd();
-  };
   $('edScroll').addEventListener('input', (e) => { ED.cam = +e.target.value; });
   $('edLeft').onclick = () => edPan(-10); $('edRight').onclick = () => edPan(10);
   const setLen = (n) => {
@@ -806,7 +837,7 @@
 
   // share code: copy / paste a level as text
   function encodeLevel(d) {
-    const o = { n: d.name, l: d.len, o: (d.objs || []).map((q) => q.t === 'h' ? ['h', q.x] : q.t === 'g' ? ['g', q.x, MODE_CODE[q.m] || 'c'] : [q.t, q.x, q.y, q.d || 0]) };
+    const o = { n: d.name, l: d.len, o: (d.objs || []).map((q) => q.t === 'h' ? ['h', q.x] : q.t === 'g' ? ['g', q.x, MODE_CODE[q.m] || 'c'] : q.t === 'v' ? ['v', q.x, q.n] : [q.t, q.x, q.y, q.d || 0]) };
     return 'CD1:' + btoa(unescape(encodeURIComponent(JSON.stringify(o))));
   }
   function decodeLevel(text) {
@@ -817,6 +848,7 @@
     for (const q of (o.o || []).slice(0, 5000)) {
       if (q[0] === 'h' && ok(q[1], 0, len)) objs.push({ t: 'h', x: q[1] });
       else if (q[0] === 'g' && ok(q[1], 0, len) && MM[q[2]]) objs.push({ t: 'g', x: q[1], m: MM[q[2]] });
+      else if (q[0] === 'v' && ok(q[1], 0, len) && ok(q[2], 1, 4)) objs.push({ t: 'v', x: q[1], n: q[2] });
       else if ((q[0] === 'b' || q[0] === 'p') && ok(q[1], 0, len) && ok(q[2], 0, 6)) objs.push({ t: q[0], x: q[1], y: q[2] });
       else if (q[0] === 's' && ok(q[1], 0, len) && ok(q[2], 0, 6)) objs.push({ t: 's', x: q[1], y: q[2], d: q[3] ? 1 : 0 });
     }
@@ -860,9 +892,9 @@
   function hostState() {
     const p = G.p;
     return {
-      mode: G.mode, attempt: G.attempt, hero: G.hero.id, difficulty: G.diff.id, testing: G.testing, held: G.held,
+      mode: G.mode, attempt: G.attempt, hero: G.hero.id, testing: G.testing, held: G.held,
       level: G.lv && G.def ? { id: G.def.id, name: G.def.name, len: G.lv.len, speed: G.lv.speed } : null,
-      player: p ? { x: p.x, y: p.y, vy: p.vy, mode: p.mode, size: p.sz, grounded: p.grounded, dead: p.dead } : null,
+      player: p ? { x: p.x, y: p.y, vy: p.vy, mode: p.mode, speed: p.si, size: p.sz, grounded: p.grounded, dead: p.dead } : null,
     };
   }
   function toast(msg, ms) {
@@ -875,6 +907,7 @@
       if (!q) continue;
       if (q.t === 'h' && ok(q.x, 0, len)) out.push({ t: 'h', x: q.x });
       else if (q.t === 'g' && ok(q.x, 0, len) && DashCore.MODES.indexOf(q.m) >= 0) out.push({ t: 'g', x: q.x, m: q.m });
+      else if (q.t === 'v' && ok(q.x, 0, len) && ok(q.n, 1, 4)) out.push({ t: 'v', x: q.x, n: q.n });
       else if ((q.t === 'b' || q.t === 'p') && ok(q.x, 0, len) && ok(q.y, 0, 6)) out.push({ t: q.t, x: q.x, y: q.y });
       else if (q.t === 's' && ok(q.x, 0, len) && ok(q.y, 0, 6)) out.push({ t: 's', x: q.x, y: q.y, d: q.d ? 1 : 0 });
     }
@@ -903,7 +936,7 @@
       if (G.modLevels.some((x) => x.id === id)) throw new Error('уровень «' + l.id + '» уже добавлен');
       const name = String(l.name || 'Уровень мода').slice(0, 30);
       if (Array.isArray(l.plan)) {
-        const plan = l.plan.slice(0, 30).map((s) => ({ m: DashCore.MODES.indexOf(s && s.m) >= 0 ? s.m : 'cube', len: Math.round(clampN(s && s.len, 40, 1500, 100)) }));
+        const plan = l.plan.slice(0, 30).map((s) => ({ m: DashCore.MODES.indexOf(s && s.m) >= 0 ? s.m : 'cube', len: Math.round(clampN(s && s.len, 40, 1500, 100)), speed: Math.round(clampN(s && s.speed, 1, 4, 1)) }));
         if (!plan.length) throw new Error('plan пустой');
         const pool = (Array.isArray(l.pool) ? l.pool : ['spike1', 'spike2', 'block1']).filter((n) => n in DashCore.PATTERNS);
         if (!pool.length) throw new Error('pool: нет известных узоров (' + Object.keys(DashCore.PATTERNS).join(', ') + ')');

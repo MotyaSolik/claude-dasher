@@ -40,7 +40,7 @@
   }
 
   // ---------- cube patterns (ground level is y = 0) ----------
-  const P = {
+  const P_ = {
     spike1:  { w: 1, add: (L, x) => L.spike(x, 0) },
     spike2:  { w: 2, add: (L, x) => { L.spike(x, 0); L.spike(x + 1, 0); } },
     block1:  { w: 1, add: (L, x) => L.block(x, 0, 1, 1) },
@@ -65,16 +65,24 @@
     } },
   };
 
-  // difficulty: speed (tiles/s), rest between obstacles (multiple of the base gap, in time),
-  // margin = free space the generator keeps around the guaranteed path in ship / wave sections.
-  const DIFFS = [
-    { id: 'easy', name: 'Easy', speed: 7.5, rest: 1.3, skip: ['padSpikes', 'padBlock', 'spikeTrain', 'pitSpike', 'hill'],
+  // Speed portals: 1 blue (base), 2 green, 3 pink, 4 red. Each speed has its own profile:
+  // speed (tiles/s), rest between obstacles (multiple of the base gap, in time), allowed patterns and the free space (margin)
+  // the generator keeps around the guaranteed path in flying sections.
+  const SPEEDS = [null,
+    { n: 1, name: '1x', color: '#4da3ff', speed: 7.5, rest: 1.3, skip: ['padSpikes', 'padBlock', 'spikeTrain', 'pitSpike', 'hill'],
       margin: { ship: 0.62, wave: 0.55, ball: 0.6, ufo: 0.6, robot: 0.55, spider: 0.6 }, density: 0.6 },
-    { id: 'hard', name: 'Hard', speed: 10.5, rest: 0.85, skip: [], margin: { ship: 0.4, wave: 0.34, ball: 0.42, ufo: 0.42, robot: 0.38, spider: 0.42 }, density: 1 },
-    { id: 'swin', name: 'SWIN', speed: 13, rest: 0.62, skip: [], margin: { ship: 0.3, wave: 0.26, ball: 0.32, ufo: 0.32, robot: 0.28, spider: 0.32 }, density: 1.25 },
+    { n: 2, name: '2x', color: '#5ee08a', speed: 10.5, rest: 0.85, skip: [],
+      margin: { ship: 0.4, wave: 0.34, ball: 0.42, ufo: 0.42, robot: 0.38, spider: 0.42 }, density: 1 },
+    { n: 3, name: '3x', color: '#ff4d9a', speed: 13, rest: 0.62, skip: [],
+      margin: { ship: 0.3, wave: 0.26, ball: 0.32, ufo: 0.32, robot: 0.28, spider: 0.32 }, density: 1.25 },
+    { n: 4, name: '4x', color: '#ff4d4d', speed: 16, rest: 0.5, skip: [],
+      margin: { ship: 0.24, wave: 0.2, ball: 0.26, ufo: 0.26, robot: 0.22, spider: 0.26 }, density: 1.4 },
   ];
+  const BASE_SPEED = SPEEDS[1].speed;
+  const speedFactor = (n) => SPEEDS[n].speed / BASE_SPEED;
 
-  // plan: sections in tiles at speed 9 (scaled with the difficulty so the duration stays the same)
+  // plan: sections { m: mode, len, speed: 1..4 (default 1) }. `len / 9` is the section's length in SECONDS, whatever its
+  // speed, so the music sync of a level never depends on the speeds in it. The first 3 levels have no speed portals.
   const LEVELS = [
     {
       id: 'l1', name: 'Первые шаги', stars: 1, seed: 11, hue: 205,
@@ -96,50 +104,52 @@
     },
     {
       id: 'l4', name: 'Космолёт', stars: 2, seed: 5, hue: 270,
-      plan: [{ m: 'cube', len: 60 }, { m: 'ship', len: 190 }, { m: 'cube', len: 60 }],
+      plan: [{ m: 'cube', len: 60 }, { m: 'ship', len: 90 }, { m: 'ship', len: 100, speed: 2 }, { m: 'cube', len: 60 }],
       gap: [6, 9], pool: ['spike1', 'spike2', 'block1', 'block3', 'pit2', 'stairs'],
     },
     {
       id: 'l5', name: 'Зигзаг', stars: 4, seed: 9, hue: 165,
-      plan: [{ m: 'cube', len: 60 }, { m: 'wave', len: 190 }, { m: 'cube', len: 60 }],
+      plan: [{ m: 'cube', len: 60 }, { m: 'wave', len: 90 }, { m: 'wave', len: 100, speed: 2 }, { m: 'cube', len: 60 }],
       gap: [5, 8], pool: ['spike1', 'spike2', 'block1', 'blockSpike', 'pit2', 'stairs'],
     },
     {
       id: 'l6', name: 'Шар и НЛО', stars: 3, seed: 21, hue: 95,
-      plan: [{ m: 'cube', len: 60 }, { m: 'ball', len: 110 }, { m: 'cube', len: 40 }, { m: 'ufo', len: 110 }, { m: 'cube', len: 50 }],
+      plan: [{ m: 'cube', len: 60 }, { m: 'ball', len: 110 }, { m: 'cube', len: 40, speed: 2 }, { m: 'ufo', len: 110, speed: 2 }, { m: 'cube', len: 50 }],
       gap: [5, 8], pool: ['spike1', 'spike2', 'block1', 'blockSpike', 'pit2', 'stairs'],
     },
     {
       id: 'l7', name: 'Робот и паук', stars: 4, seed: 31, hue: 45,
-      plan: [{ m: 'cube', len: 60 }, { m: 'robot', len: 110 }, { m: 'cube', len: 40 }, { m: 'spider', len: 110 }, { m: 'cube', len: 50 }],
+      plan: [{ m: 'cube', len: 60 }, { m: 'robot', len: 110, speed: 2 }, { m: 'cube', len: 40, speed: 2 }, { m: 'spider', len: 110, speed: 3 }, { m: 'cube', len: 50 }],
       gap: [4.5, 7], pool: ['spike1', 'spike2', 'block1', 'blockSpike', 'spikeBlock', 'pit2', 'stairs'],
     },
     {
       id: 'l8', name: 'Парад режимов', stars: 5, seed: 41, hue: 300,
-      plan: [{ m: 'cube', len: 50 }, { m: 'ship', len: 60 }, { m: 'ball', len: 60 }, { m: 'cube', len: 30 }, { m: 'ufo', len: 60 },
-        { m: 'wave', len: 60 }, { m: 'robot', len: 60 }, { m: 'cube', len: 30 }, { m: 'spider', len: 60 }, { m: 'cube', len: 40 }],
+      plan: [{ m: 'cube', len: 50 }, { m: 'ship', len: 60, speed: 2 }, { m: 'ball', len: 60, speed: 2 }, { m: 'cube', len: 30, speed: 2 },
+        { m: 'ufo', len: 60, speed: 3 }, { m: 'wave', len: 60, speed: 3 }, { m: 'robot', len: 60, speed: 3 }, { m: 'cube', len: 30, speed: 3 },
+        { m: 'spider', len: 60, speed: 4 }, { m: 'cube', len: 40, speed: 2 }],
       gap: [3.5, 6], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'padSpikes', 'spikeTrain', 'stairs'],
     },
     {
-      // the hardest level; finishing it on SWIN unlocks the A6 skin.
-      // Built for music: it lasts exactly 70 s (1:10) on every difficulty and the DROP starts at 26 s:
-      // a calm intro (26 s of easy cube), then the dense multi-mode part (44 s).
+      // the hardest level; finishing it unlocks the A6 skin.
+      // Built for music: it lasts exactly 70 s (1:10) and the DROP starts at 26 s: a calm intro (26 s of easy cube
+      // at the base speed), then the dense multi-mode part (44 s) with speed portals up to 4x.
       id: 'l9', name: 'Thinking Space II', stars: 5, seed: 51, hue: 255,
-      seconds: 70, drop: 26, clearTime: 0.9,
+      drop: 26, clearTime: 0.9,
       musicHint: { track: 'Nuke Powder', artist: 'MaelouX', offset: 117 },
       plan: [
         { m: 'cube', len: 234, gap: [6, 9], pool: ['spike1', 'spike2', 'block1', 'block3', 'pit2', 'stairs', 'blockSpike'] },   // 0:00 - 0:26 intro
-        { m: 'ship', len: 55, density: 1.7 }, { m: 'ball', len: 50, density: 1.7 }, { m: 'cube', len: 25 }, { m: 'wave', len: 50, density: 1.7 },
-        { m: 'ufo', len: 45, density: 1.7 }, { m: 'robot', len: 40, density: 1.7 }, { m: 'cube', len: 20 }, { m: 'spider', len: 45, density: 1.7 },
-        { m: 'wave', len: 30, density: 1.7 }, { m: 'cube', len: 36 },
+        { m: 'ship', len: 55, speed: 2, density: 1.7 }, { m: 'ball', len: 50, speed: 2, density: 1.7 }, { m: 'cube', len: 25, speed: 3 },
+        { m: 'wave', len: 50, speed: 3, density: 1.7 }, { m: 'ufo', len: 45, speed: 3, density: 1.7 }, { m: 'robot', len: 40, speed: 3, density: 1.7 },
+        { m: 'cube', len: 20, speed: 3 }, { m: 'spider', len: 45, speed: 4, density: 1.7 }, { m: 'wave', len: 30, speed: 4, density: 1.7 },
+        { m: 'cube', len: 36, speed: 2 },
       ],
       gap: [3.2, 5.5], pool: ['spike2', 'blockSpike', 'spikeBlock', 'hill', 'pit3', 'pitSpike', 'padSpikes', 'padBlock', 'spikeTrain', 'stairs'],
     },
   ];
 
   // ---------- shared level helpers ----------
-  function newLevel(def, diff) {
-    return { def, diff, speed: diff.speed, len: 0, solids: [], spikes: [], pads: [], portals: [], holes: [],
+  function newLevel(def) {
+    return { def, speed: BASE_SPEED, len: 0, solids: [], spikes: [], pads: [], portals: [], holes: [],
       cols: new Map(), ground: [], segments: [] };
   }
   function putCol(cols, o, w) {
@@ -148,7 +158,7 @@
       cols.get(c).push(o);
     }
   }
-  // holes -> ground blocks, column buckets, mode segments (sections between portals)
+  // holes -> ground blocks, column buckets, segments (sections between portals)
   function finalize(lv) {
     lv.holes.sort((a, b) => a[0] - b[0]);
     let cur = -30;
@@ -159,68 +169,87 @@
     for (const o of lv.spikes) putCol(lv.cols, o, 1);
     for (const o of lv.pads) putCol(lv.cols, o, 1);
     lv.portals.sort((a, b) => a.x - b.x);
-    if (!lv.segments.length) {
-      let m = 'cube', x0 = 0;
-      for (const po of lv.portals) { if (po.mode !== m) { lv.segments.push({ mode: m, x0, x1: po.x }); m = po.mode; x0 = po.x; } }
-      lv.segments.push({ mode: m, x0, x1: lv.len });
+    if (!lv.segments.length) {   // custom levels: a segment ends at every mode or speed portal
+      let m = 'cube', n = 1, x0 = 0;
+      for (const po of lv.portals) {
+        const nm = po.mode || m, nn = po.speed || n;
+        if (nm !== m || nn !== n) { if (po.x > x0 + 1e-6) lv.segments.push({ mode: m, speed: n, x0, x1: po.x }); m = nm; n = nn; x0 = po.x; }
+      }
+      lv.segments.push({ mode: m, speed: n, x0, x1: lv.len });
     }
     return lv;
   }
 
+  // seconds from the start of the level until x (the speed changes at the portals)
+  function timeAt(lv, x) {
+    let t = 0;
+    for (const seg of lv.segments) {
+      const v = lv.speed * speedFactor(seg.speed || 1);
+      if (x <= seg.x0) break;
+      t += (Math.min(x, seg.x1) - seg.x0) / v;
+    }
+    return t;
+  }
+  const levelTime = (lv) => timeAt(lv, lv.len);
+
   // ---------- generated levels ----------
-  function buildLevel(def, diff, seedOverride) {
-    diff = diff || DIFFS[1];
-    const rnd = mulberry32(seedOverride !== undefined ? seedOverride : ((def.seeds && def.seeds[diff.id]) || def.seed));
-    const lv = newLevel(def, diff), sc = diff.speed / 9;
+  function buildLevel(def, seedOverride) {
+    const rnd = mulberry32(seedOverride !== undefined ? seedOverride : def.seed);
+    const lv = newLevel(def);
     const L = {
-      s: diff.speed,
+      s: BASE_SPEED,
       block: (x, y, w, h) => lv.solids.push({ k: 0, x, y, w, h }),
       spike: (x, y, d) => lv.spikes.push({ k: 1, x, y, d: d || 0 }),
       pad: (x, y) => lv.pads.push({ k: 2, x, y }),
       hole: (x, w) => lv.holes.push([x, x + w]),
     };
-    const okPool = (list) => list.filter((n) => diff.skip.indexOf(n) < 0);
-    const plan = def.plan.map((s) => ({ m: s.m, len: def.seconds ? s.len * sc : Math.round(s.len * sc), pool: s.pool, gap: s.gap, density: s.density }));
-    if (def.seconds) {   // the level lasts exactly `seconds` at every speed: the last section absorbs the rounding
-      const want = def.seconds * diff.speed, have = plan.reduce((a, s) => a + s.len, 0);
-      plan[plan.length - 1].len += want - have;
-    }
+    // a section of `len` (= seconds * 9) lasts len / 9 seconds at any speed, so its length in tiles is seconds * speed
     let cx = 0;
-    const secs = plan.map((s) => { const o = { m: s.m, x0: cx, x1: cx + s.len, pool: s.pool, gap: s.gap, density: s.density }; cx += s.len; return o; });
+    const secs = def.plan.map((s) => {
+      const n = s.speed || 1, o = { m: s.m, n, x0: cx, x1: cx + (s.len / 9) * SPEEDS[n].speed, pool: s.pool, gap: s.gap, density: s.density };
+      cx = o.x1; return o;
+    });
     lv.len = cx;
-    secs.forEach((s, i) => { if (i > 0 && s.m !== secs[i - 1].m) lv.portals.push({ k: 3, x: s.x0, mode: s.m }); });
-    lv.portals.sort((a, b) => a.x - b.x);
+    secs.forEach((s, i) => {
+      s.modePortal = i > 0 && s.m !== secs[i - 1].m;
+      s.speedPortal = s.n !== (i > 0 ? secs[i - 1].n : 1);
+      if (s.modePortal) lv.portals.push({ k: 3, x: s.x0, mode: s.m });
+      if (s.speedPortal) lv.portals.push({ k: 3, x: s.x0, speed: s.n });
+    });
 
     secs.forEach((s, i) => {
-      const last = i === secs.length - 1;
-      const seg = { mode: s.m, x0: s.x0, x1: s.x1 };
+      const last = i === secs.length - 1, P = SPEEDS[s.n];
+      const seg = { mode: s.m, speed: s.n, x0: s.x0, x1: s.x1 };
       if (s.m === 'cube') {
+        L.s = P.speed;
         let x = i === 0 ? 16 : s.x0 + 10, last_ = null;
-        const end = s.x1 - (last ? 14 : 12), pool = okPool(s.pool || def.pool), gap = s.gap || def.gap;
+        const end = s.x1 - (last ? 14 : 12), pool = (s.pool || def.pool).filter((nm) => P.skip.indexOf(nm) < 0), gap = s.gap || def.gap;
         while (x < end) {
           let name;
           do { name = pool[Math.floor(rnd() * pool.length)]; } while (name === last_ && rnd() < 0.7);
           last_ = name;
-          const pat = P[name], w = pat.wf ? pat.wf(diff.speed) : pat.w;
+          const pat = P_[name], w = pat.wf ? pat.wf(P.speed) : pat.w;
           if (x + w > end) break;
           pat.add(L, x);
-          x += w + (gap[0] + rnd() * (gap[1] - gap[0])) * (diff.speed / 9) * diff.rest;
+          x += w + (gap[0] + rnd() * (gap[1] - gap[0])) * (P.speed / 9) * P.rest;
         }
       } else {
-        genFlight(lv, rnd, s.m, s.x0, s.x1, diff, seg, s.density);
+        genFlight(lv, rnd, s, P, seg);
       }
       lv.segments.push(seg);
     });
     return finalize(lv);
   }
 
-  // Ship / wave section: first simulate a random hold/release input in an empty corridor, then scatter
+  // Flying section: first simulate a random hold/release input in an empty corridor, then scatter
   // obstacles only where they stay clear of that trajectory. The input is stored => beatable by construction.
-  function genFlight(lv, rnd, mode, x0, x1, diff, seg, density) {
-    const tmp = newLevel(lv.def, diff); tmp.len = x1 + 10;
-    tmp.portals.push({ k: 3, x: x0, mode });
+  function genFlight(lv, rnd, s, P, seg) {
+    const mode = s.m, x0 = s.x0, x1 = s.x1, density = s.density;
+    const tmp = newLevel(lv.def); tmp.len = x1 + 10;
+    if (s.modePortal) tmp.portals.push({ k: 3, x: x0, mode });
+    if (s.speedPortal) tmp.portals.push({ k: 3, x: x0, speed: s.n });
     putCol(tmp.cols, { k: 0, x: x0 - 5, y: -30, w: x1 - x0 + 20, h: 30 }, x1 - x0 + 20);
-    const p = enterAt(tmp, x0); p.stop = x1 - 0.5;
+    const p = enterAt(tmp, x0, mode, s.n); p.stop = x1 - 0.5;
     // seconds of [holding, released] per phase; taps (ufo / ball / spider) are 2-frame holds
     const R = { ship: [[0.25, 0.75], [0.25, 0.75]], wave: [[0.15, 0.55], [0.15, 0.55]], ufo: [[0.033, 0.033], [0.18, 0.5]],
       ball: [[0.033, 0.033], [0.5, 1.4]], spider: [[0.033, 0.033], [0.35, 1.0]], robot: [[0.05, 0.34], [0.35, 0.9]] }[mode];
@@ -235,14 +264,14 @@
     if (hold) holds.push([start, f]);
     seg.holds = holds;
 
-    const M = diff.margin[mode] || diff.margin.ship, CE = C.CEIL, ceil = hasCeiling(mode);
+    const M = P.margin[mode], CE = C.CEIL, ceil = hasCeiling(mode);
     const clear = (x, y, w, h) => {
       for (const [bx, by, bs] of boxes) {
         if (bx < x + w + M && bx + bs > x - M && by < y + h + M && by + bs > y - M) return false;
       }
       return true;
     };
-    const clr = lv.def.clearTime ? lv.def.clearTime * diff.speed : 10;   // free run-in / run-out at both ends of the section
+    const clr = lv.def.clearTime ? lv.def.clearTime * P.speed : 10;   // free run-in / run-out at both ends of the section
     let x = x0 + clr;
     while (x < x1 - clr) {
       const r = rnd(), h = 1 + Math.floor(rnd() * 3);
@@ -252,22 +281,22 @@
       else if (r < 0.68 || (!ceil && r < 0.86)) { if ((ok = clear(x, 0, 1, h))) lv.solids.push({ k: 0, x, y: 0, w: 1, h }); }
       else if (r < 0.86) { if ((ok = clear(x, CE - h, 1, h))) lv.solids.push({ k: 0, x, y: CE - h, w: 1, h }); }
       else { const y = 1 + Math.floor(rnd() * 4); if ((ok = clear(x, y, 1, 1))) lv.solids.push({ k: 0, x, y, w: 1, h: 1 }); }
-      x += (ok ? 1.2 : 0.5) + (1 + rnd() * 2.2) / ((density || 1) * diff.density);
+      x += (ok ? 1.2 : 0.5) + (1 + rnd() * 2.2) / ((density || 1) * P.density);
     }
   }
 
   // ---------- custom (editor) levels ----------
   // data: { name, len, objs: [ {t:'b',x,y} block, {t:'s',x,y,d} spike, {t:'p',x,y} pad,
-  //                            {t:'g',x,m} portal, {t:'h',x} hole ] }
-  function buildCustom(data, diff) {
-    diff = diff || DIFFS[1];
-    const lv = newLevel({ id: 'custom', name: data.name || 'Мой уровень', hue: data.hue || 200, custom: true }, diff);
+  //                            {t:'g',x,m} mode portal, {t:'v',x,n} speed portal (n = 1..4), {t:'h',x} hole ] }
+  function buildCustom(data) {
+    const lv = newLevel({ id: 'custom', name: data.name || 'Мой уровень', hue: data.hue || 200, custom: true });
     lv.len = Math.max(30, data.len | 0);
     for (const o of data.objs || []) {
       if (o.t === 'b') lv.solids.push({ k: 0, x: o.x, y: o.y, w: 1, h: 1 });
       else if (o.t === 's') lv.spikes.push({ k: 1, x: o.x, y: o.y, d: o.d ? 1 : 0 });
       else if (o.t === 'p') lv.pads.push({ k: 2, x: o.x, y: o.y });
       else if (o.t === 'g' && MODES.indexOf(o.m) >= 0) lv.portals.push({ k: 3, x: o.x, mode: o.m });
+      else if (o.t === 'v' && o.n >= 1 && o.n <= 4) lv.portals.push({ k: 3, x: o.x, speed: o.n | 0 });
       else if (o.t === 'h') lv.holes.push([o.x, o.x + 1]);
     }
     return finalize(lv);
@@ -288,11 +317,15 @@
   // ---------- physics ----------
   function newPlayer() {
     return { x: 0, y: 0, vy: 0, grounded: true, dead: false, won: false, t: 0, jumps: 0,
-      mode: 'cube', sz: C.SIZES.cube, pi: 0, modeChanged: 0, gdir: -1, prevHeld: false, rj: 9 };
+      mode: 'cube', sz: C.SIZES.cube, pi: 0, modeChanged: 0, gdir: -1, prevHeld: false, rj: 9,
+      si: 1, sf: 1, speedChanged: 0 };   // si: speed portal number (1..4), sf: its factor relative to the base speed
   }
-  // player standing on the ground just before a section starts (used by generator + checker)
-  function enterAt(lv, x0) {
+  // player standing on the ground just before a section starts, already in that section's mode and speed
+  // (used by the generator and the checker)
+  function enterAt(lv, x0, mode, n) {
     const p = newPlayer(); p.x = x0 - 0.6;
+    if (mode && mode !== 'cube') { p.mode = mode; p.sz = C.SIZES[mode]; }
+    if (n) { p.si = n; p.sf = speedFactor(n); }
     while (p.pi < lv.portals.length && lv.portals[p.pi].x <= p.x + p.sz / 2) p.pi++;
     return p;
   }
@@ -340,9 +373,11 @@
     else if (mode0 === 'ufo') { if (edge) { p.vy = C.UFO_JUMP; p.jumps++; } }
 
     // --- move x, mode portals
-    p.x += lv.speed * DT;
+    p.x += lv.speed * p.sf * DT;
     while (p.pi < lv.portals.length && p.x + p.sz / 2 >= lv.portals[p.pi].x) {
-      setMode(p, lv.portals[p.pi].mode); p.pi++; p.modeChanged++;
+      const po = lv.portals[p.pi++];
+      if (po.mode) { setMode(p, po.mode); p.modeChanged++; }
+      if (po.speed) { p.si = po.speed; p.sf = speedFactor(po.speed); p.speedChanged++; }
     }
     const SZ = p.sz;
     // any deep overlap with a solid is a crash
@@ -370,7 +405,7 @@
     } else if (p.mode === 'ship') {
       p.vy += (held ? C.SHIP_UP : C.SHIP_DN) * DT;
       if (p.vy > C.SHIP_MAX) p.vy = C.SHIP_MAX; else if (p.vy < -C.SHIP_MAX) p.vy = -C.SHIP_MAX;
-    } else p.vy = held ? lv.speed : -lv.speed;       // wave: 45 degrees
+    } else p.vy = (held ? 1 : -1) * lv.speed * p.sf;       // wave: 45 degrees at any speed
     p.y += p.vy * DT;
     p.grounded = false;
     for (let c = c0; c <= c1; c++) {
@@ -418,7 +453,7 @@
   // cube section: search over jump timings, returns the list of jump frames or null
   function solveCube(lv, seg, infl) {
     const seen = new Set();
-    const start = enterAt(lv, seg.x0); start.stop = seg.x1 - 0.5;
+    const start = enterAt(lv, seg.x0, seg.mode, seg.speed); start.stop = seg.x1 - 0.5;
     const stack = [{ p: start, f: 0, path: [] }];
     const MAXW = 80;
     while (stack.length) {
@@ -448,7 +483,7 @@
 
   function held(holds, f) { for (const [a, b] of holds) if (f >= a && f < b) return true; return false; }
   function replaySegment(lv, seg, sol, infl) {
-    const p = enterAt(lv, seg.x0); p.stop = seg.x1 - 0.5;
+    const p = enterAt(lv, seg.x0, seg.mode, seg.speed); p.stop = seg.x1 - 0.5;
     const jumps = sol.jumps ? new Set(sol.jumps) : null;
     let f = 0;
     while (!p.dead && !p.won && f < 60 * 400) { frame(lv, p, jumps ? jumps.has(f) : held(sol.holds, f), infl); f++; }
@@ -457,18 +492,19 @@
 
   // returns one solution per segment ({jumps} or {holds}) or null when some section cannot be beaten
   function solvable(lv, infl) {
-    if (infl === undefined) infl = 0.12;
     const sols = [];
     for (const seg of lv.segments) {
+      // faster sections get a smaller safety margin (the hitboxes of spikes are inflated by it)
+      const inf = infl === undefined ? ((seg.speed || 1) >= 3 ? 0.06 : 0.12) : infl;
       let sol = null;
-      if (seg.mode === 'cube') { const j = solveCube(lv, seg, infl); if (j) sol = { jumps: j }; }
-      else if (seg.holds) sol = replaySegment(lv, seg, { holds: seg.holds }, infl) ? { holds: seg.holds } : null;
+      if (seg.mode === 'cube') { const j = solveCube(lv, seg, inf); if (j) sol = { jumps: j }; }
+      else if (seg.holds) sol = replaySegment(lv, seg, { holds: seg.holds }, inf) ? { holds: seg.holds } : null;
       if (!sol) return null;
       sols.push(sol);
     }
     return sols;
   }
 
-  return { C, MODES, hasCeiling, LEVELS, DIFFS, PATTERNS: P, buildLevel, buildCustom, addObject, newPlayer, enterAt, step, frame,
+  return { C, MODES, hasCeiling, LEVELS, SPEEDS, BASE_SPEED, speedFactor, timeAt, levelTime, PATTERNS: P_, buildLevel, buildCustom, addObject, newPlayer, enterAt, step, frame,
     solvable, replaySegment, mulberry32 };
 });
