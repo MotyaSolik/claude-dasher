@@ -334,4 +334,35 @@ window.DashExamples = [
   }
 });`,
   },
+  {
+    name: 'Музыка уровня (пример)',
+    desc: 'Привязывает трек к уровню «Первые шаги». Здесь трек создаётся кодом (бас с ритмом), свой файл подключается так же. Пример api.music.',
+    src: `ClaudeDash.register({
+  id: 'level-music-demo', name: 'Музыка уровня', version: '1.0', author: 'Claude Dash', apiVersion: 1,
+  description: 'Свой трек для уровня «Первые шаги» вместо встроенной музыки.',
+  init(api) {
+    // Мини-синтезатор: 8-секундный луп в формате WAV. Вместо него можно указать свой файл:
+    //   src: 'https://example.com/track.mp3'   (нужен интернет и разрешение автора трека)
+    //   src: 'audio/track.ogg'                 (файл лежит в папке web/audio/ твоей сборки)
+    function makeWav(seconds) {
+      var sr = 11025, n = sr * seconds, data = new Uint8Array(44 + n), v = new DataView(data.buffer);
+      function s(o, t) { for (var i = 0; i < t.length; i++) data[o + i] = t.charCodeAt(i); }
+      s(0, 'RIFF'); v.setUint32(4, 36 + n, true); s(8, 'WAVE'); s(12, 'fmt '); v.setUint32(16, 16, true);
+      v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr, true);
+      v.setUint16(32, 1, true); v.setUint16(34, 8, true); s(36, 'data'); v.setUint32(40, n, true);
+      var notes = [110, 110, 165, 131, 110, 110, 196, 165];
+      for (var i = 0; i < n; i++) {
+        var t = i / sr, f = notes[Math.floor(t / 0.25) % notes.length], ph = t % 0.25, kt = t % 0.5;
+        var bass = 0.45 * Math.sign(Math.sin(2 * Math.PI * f * t)) * Math.max(0, 1 - ph * 3.2);
+        var kick = kt < 0.12 ? 0.35 * Math.sin(2 * Math.PI * (120 - 300 * kt) * kt) : 0;
+        data[44 + i] = 128 + Math.round(Math.max(-1, Math.min(1, bass + kick)) * 100);
+      }
+      var bin = ''; for (var j = 0; j < data.length; j++) bin += String.fromCharCode(data[j]);
+      return 'data:audio/wav;base64,' + btoa(bin);
+    }
+    api.music.set('l1', { src: makeWav(8), title: 'Demo loop', artist: 'Claude Dash', volume: 0.6, loop: true });
+    api.audio.muteBuiltInMusic(false);
+  }
+});`,
+  },
 ];

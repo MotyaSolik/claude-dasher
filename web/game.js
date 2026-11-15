@@ -88,6 +88,36 @@
     },
   };
 
+  // ---------- level music ----------
+  // A mod can attach an audio track to a level (api.music.set). It then replaces the built-in music for that level:
+  // it restarts on every attempt, stops on death / win / menu and pauses with the game, like the built-in music does.
+  const AUDIO_OK = /^(data:audio\/[a-z0-9.+-]+;base64,|https:\/\/|audio\/)/i;
+  const Music = {
+    map: new Map(),              // levelId -> { src, title, artist, volume, startAt, loop, modId, audio }
+    cur: null, paused: false,
+    builtinMuted: new Set(),     // mod ids that turned the built-in music off
+    sounds: new Set(),           // <audio> elements from api.audio.play
+    spec(def) { return def ? this.map.get(def.id) : undefined; },
+    builtinOff() { return this.builtinMuted.size > 0; },
+    start(def) {
+      this.stop();
+      const sp = this.spec(def); if (!sp) return false;
+      if (!store.data.sound) return true;                  // a level track owns the music even when sound is off
+      if (!sp.audio) { sp.audio = new Audio(); sp.audio.preload = 'auto'; sp.audio.src = sp.src; }
+      const a = sp.audio; a.loop = sp.loop; a.volume = sp.volume;
+      try { a.currentTime = sp.startAt; } catch (e) { /* not seekable yet */ }
+      const pr = a.play(); if (pr && pr.catch) pr.catch(() => {});
+      this.cur = sp; this.paused = false; return true;
+    },
+    stop() { if (this.cur) { try { this.cur.audio.pause(); } catch (e) { /* ignore */ } } this.cur = null; this.paused = false; },
+    pause() { if (this.cur && !this.cur.audio.paused) { this.cur.audio.pause(); this.paused = true; } },
+    resume() {
+      if (!(this.cur && this.paused)) return false;
+      this.paused = false; const pr = this.cur.audio.play(); if (pr && pr.catch) pr.catch(() => {}); return true;
+    },
+    applyMute() { if (!store.data.sound) { this.stop(); for (const a of this.sounds) a.pause(); } },
+  };
+
   // ---------- viewport ----------
   let W = 0, H = 0, DPR = 1, TILE = 40, GROUND_Y = 0;
   function metrics() {
@@ -116,12 +146,25 @@
   window.addEventListener('resize', resize); resize();
 
   const rootNote = (def) => (def.hue < 100 ? 49 : def.hue < 250 ? 55 : 58.27);
+  // level track (if a mod set one) or the built-in generated music
+  function startMusic() {
+    Snd.musicStop();
+    if (Music.start(G.def)) {
+      const sp = Music.spec(G.def);
+      if (sp && sp.title && G.attempt === 1 && store.data.sound) toast('♪ ' + (sp.artist ? sp.artist + ' — ' : '') + sp.title, 4200);
+      return;
+    }
+    if (!Music.builtinOff()) Snd.musicStart(rootNote(G.def));
+  }
+  const stopMusic = () => { Snd.musicStop(); Music.stop(); };
+  const pauseMusic = () => { Snd.musicStop(); Music.pause(); };
+  const resumeMusic = () => { if (!Music.resume()) startMusic(); };
   const bestKey = (def) => def.id + ':' + G.diff.id;
 
   function startAttempt() {
     G.p = newPlayer(); G.rot = 0; G.ang = 0; G.mc = 0; G.wtrail.length = 0; G.parts.length = 0;
     G.deadT = 0; G.acc = 0; G.flash = 0; G.cam = -3; G.mode = 'play'; metrics();
-    Snd.musicStart(rootNote(G.def));
+    startMusic();
     emit('attempt', G.attempt);
   }
   function begin() {
@@ -136,20 +179,21 @@
   }
   function leave() { if (G.testing) { const d = G.editing; G.testing = false; openEditor(d); } else toMenu(); }
   function toMenu() {
-    Snd.musicStop(); G.mode = 'menu'; G.testing = false; metrics();
+    stopMusic(); G.mode = 'menu'; G.testing = false; metrics();
     hide('pause'); hide('win'); hide('btnPause'); hide('editor'); show('menu'); renderMenu();
     emit('menu');
   }
   function pause() {
     if (G.mode !== 'play' && G.mode !== 'dead') return;
-    G.prevMode = G.mode; G.mode = 'pause'; Snd.musicStop();
+    G.prevMode = G.mode; G.mode = 'pause'; pauseMusic(); emit('pause');
     $('btnMenu').textContent = G.testing ? '✎ В редактор' : '☰ В меню';
     renderPauseExtra(); show('pause');
   }
   function resume() {
     if (G.mode !== 'pause') return;
     hide('pause'); G.last = performance.now();
-    if (G.prevMode === 'dead') { G.attempt++; startAttempt(); } else { G.mode = 'play'; Snd.musicStart(rootNote(G.def)); }
+    if (G.prevMode === 'dead') { G.attempt++; startAttempt(); } else { G.mode = 'play'; resumeMusic(); }
+    emit('resume');
   }
   function restart() { hide('pause'); hide('win'); G.attempt++; startAttempt(); G.last = performance.now(); }
 
@@ -188,7 +232,7 @@
   $('btnMenu').onclick = leave; $('btnMenu2').onclick = leave;
   $('btnAgain').onclick = restart;
   $('btnNext').onclick = () => { hide('win'); const i = LEVELS.indexOf(G.def); startLevel(LEVELS[(i + 1) % LEVELS.length]); };
-  $('btnSound').onclick = () => { store.data.sound = !store.data.sound; store.save(); Snd.init(); renderSoundBtn(); };
+  $('btnSound').onclick = () => { store.data.sound = !store.data.sound; store.save(); Snd.init(); Music.applyMute(); renderSoundBtn(); };
   // called by the Android shell for the hardware back button; returns true when handled
   window.__back = () => {
     if (G.mode === 'play' || G.mode === 'dead') { pause(); return true; }
@@ -226,11 +270,11 @@
     }
     const lvls = $('levels'); lvls.innerHTML = '';
     for (const def of LEVELS) {
-      const best = store.data.best[bestKey(def)] || 0, b = document.createElement('button');
+      const best = store.data.best[bestKey(def)] || 0, mus = Music.spec(def), b = document.createElement('button');
       const modes = [...new Set(def.plan.map((s) => s.m))].map((m) => '<i class="m-' + m + '">' + MODE_NAME[m] + '</i>').join('');
       b.className = 'level';
       b.innerHTML = '<div class="nm">' + def.name + '</div><div class="st">' + '★'.repeat(def.stars) + '☆'.repeat(5 - def.stars) +
-        '</div><div class="modes">' + modes + '</div><div class="best">Рекорд: ' + best + '%</div><div class="bar"><i style="width:' + best + '%"></i></div>';
+        '</div><div class="modes">' + modes + '</div>' + (mus && mus.title ? '<div class="mus">♪ ' + esc((mus.artist ? mus.artist + ' — ' : '') + mus.title) + '</div>' : '') + '<div class="best">Рекорд: ' + best + '%</div><div class="bar"><i style="width:' + best + '%"></i></div>';
       b.onclick = () => { Snd.init(); startLevel(def); };
       lvls.appendChild(b);
     }
@@ -270,7 +314,7 @@
   // ---------- update ----------
   function onDeath() {
     const p = G.p; G.mode = 'dead'; G.deadT = 0; G.shake = 0.35; G.flash = 0.25;
-    Snd.musicStop(); Snd.die();
+    stopMusic(); Snd.die();
     burst(p.x + p.sz / 2, p.y + p.sz / 2, 26, G.hero.colors, 9);
     const pct = Math.min(99, Math.floor((p.x / G.lv.len) * 100));
     G.bestRun = Math.max(G.bestRun, pct); G.lastPct = pct;
@@ -292,7 +336,7 @@
     return out;
   }
   function onWin() {
-    G.mode = 'win'; Snd.musicStop(); Snd.win(); emit('win', { attempt: G.attempt });
+    G.mode = 'win'; stopMusic(); Snd.win(); emit('win', { attempt: G.attempt });
     if (!G.testing) { store.data.best[bestKey(G.def)] = 100; store.save(); }
     burst(G.p.x + 1, G.p.y + 1, 50, ['#ffd24a', '#ff7a45', '#5ad1ff', '#9dff8a'], 10);
     $('winStats').textContent = G.def.name + ' · ' + G.diff.name + ' — попыток: ' + G.attempt;
@@ -634,7 +678,7 @@
     const d = entry ? JSON.parse(JSON.stringify(entry)) : { id: 'u' + Date.now().toString(36), name: 'Мой уровень', len: 120, objs: [] };
     ED.data = d; ED.cells = new Map(); for (const o of d.objs || []) ED.cells.set(cellKey(o), o);
     ED.cam = 0; ED.down = false; G.editing = d; G.testing = false;
-    Snd.musicStop(); G.mode = 'edit'; metrics();
+    stopMusic(); G.mode = 'edit'; metrics();
     hide('menu'); hide('pause'); hide('win'); hide('btnPause'); hide('edCodePanel'); show('editor');
     $('edName').value = d.name || '';
     buildToolbar(); rebuildEd(); $('edScroll').value = 0;
@@ -800,9 +844,9 @@
       player: p ? { x: p.x, y: p.y, vy: p.vy, mode: p.mode, size: p.sz, grounded: p.grounded, dead: p.dead } : null,
     };
   }
-  function toast(msg) {
+  function toast(msg, ms) {
     const t = $('toast'); t.textContent = msg; t.classList.remove('hidden');
-    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hidden'), 2600);
+    clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.add('hidden'), ms || 2600);
   }
   function cleanObjs(list, len) {
     const ok = (v, a, b) => Number.isInteger(v) && v >= a && v <= b, out = [];
@@ -885,8 +929,42 @@
       for (let i = uiMenus.length - 1; i >= 0; i--) if (uiMenus[i].modId === modId) uiMenus.splice(i, 1);
       for (let i = uiPanels.length - 1; i >= 0; i--) if (uiPanels[i].modId === modId) { uiPanels[i].el.remove(); uiPanels.splice(i, 1); }
       if (themes.delete(modId)) applyTheme();
+      for (const [lid, s] of [...Music.map]) if (s.modId === modId) { if (Music.cur === s) Music.stop(); Music.map.delete(lid); }
+      for (const a of [...Music.sounds]) if (a._mod === modId) { a.pause(); Music.sounds.delete(a); }
+      Music.builtinMuted.delete(modId);
     },
     addPauseButton(label, fn, modId) { pauseButtons.push({ modId, label, fn }); },
+    setMusic(levelId, spec, modId) {
+      if (typeof levelId !== 'string' || !levelId || levelId.length > 80) throw new Error('music.set: нужен id уровня (например "l9")');
+      if (!spec || typeof spec !== 'object') throw new Error('music.set: нужен объект { src, title, artist, ... }');
+      if (typeof spec.src !== 'string' || !AUDIO_OK.test(spec.src)) throw new Error('music.set: src — data:audio/...;base64,..., https://... или audio/файл');
+      const old = Music.map.get(levelId);
+      if (old && old.modId !== modId) throw new Error('у уровня «' + levelId + '» уже есть музыка от мода «' + old.modId + '»');
+      if (old && Music.cur === old) Music.stop();
+      const txt = (v) => (v === undefined || v === null ? '' : String(v).slice(0, 60));
+      Music.map.set(levelId, { src: spec.src, title: txt(spec.title), artist: txt(spec.artist), modId,
+        volume: clampN(+spec.volume, 0, 1, 0.8), startAt: clampN(+spec.startAt, 0, 3600, 0), loop: !!spec.loop, audio: null });
+      if (!modLoading && G.mode === 'menu') renderMenu();
+    },
+    clearMusic(levelId, modId) {
+      const s = Music.map.get(levelId);
+      if (s && s.modId === modId) { if (Music.cur === s) Music.stop(); Music.map.delete(levelId); if (!modLoading && G.mode === 'menu') renderMenu(); }
+    },
+    listMusic() { return [...Music.map.entries()].map(([levelId, s]) => ({ levelId, title: s.title, artist: s.artist, modId: s.modId })); },
+    playSound(src, o, modId) {
+      if (typeof src !== 'string' || !AUDIO_OK.test(src)) throw new Error('audio.play: src — data:audio/..., https://... или audio/файл');
+      if (Music.sounds.size >= 8) throw new Error('audio.play: слишком много звуков одновременно (до 8)');
+      o = o || {};
+      const a = new Audio(src); a._mod = modId; a.volume = clampN(+o.volume, 0, 1, 0.8); a.loop = !!o.loop;
+      Music.sounds.add(a); a.onended = () => Music.sounds.delete(a);
+      if (store.data.sound) { const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); }
+      return Object.freeze({
+        stop: () => { a.pause(); Music.sounds.delete(a); }, pause: () => a.pause(),
+        resume: () => { if (store.data.sound) { const pr = a.play(); if (pr && pr.catch) pr.catch(() => {}); } },
+        setVolume: (v) => { a.volume = clampN(+v, 0, 1, a.volume); }, isPlaying: () => !a.paused && !a.ended,
+      });
+    },
+    muteBuiltIn(on, modId) { if (on) { Music.builtinMuted.add(modId); Snd.musicStop(); } else Music.builtinMuted.delete(modId); },
     createMenu(spec, modId, guard) { return createMenu(spec, modId, guard); },
     createPanel(spec, modId, guard) { return createPanel(spec, modId, guard); },
     setTheme(modId, vars) { themes.set(modId, cleanTheme(vars)); applyTheme(); },
@@ -1132,5 +1210,6 @@
   $('safeBanner').classList.toggle('hidden', !SAFE);
   requestAnimationFrame(frame);
   window.__mods = { host, reload: reloadMods, install: installSource };
+  window.__music = Music; window.__snd = Snd;
   window.__game = G; // handy for debugging / tests
 })();
